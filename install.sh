@@ -3,7 +3,7 @@ set -e
 
 # Defaults
 DOMAIN="oc.example.com"
-EMAIL="admin@itconsvl.com"
+EMAIL="admin@example.com"
 CERT_PATH="/opt/certs"
 OC_NET="172.16.24.0/24"
 OCSERV_DNS="192.168.200.254"
