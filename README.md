@@ -1,1 +1,2 @@
 # itc_ocserv-dashboard
+The project is based on a fork of https://github.com/mmtaee/ocserv-dashboard. All components have been consolidated into a single Docker image. Credit to the original developer for the dashboard implementation.
