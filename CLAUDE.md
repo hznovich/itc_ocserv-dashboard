@@ -128,3 +128,15 @@ docker exec ocserv occtl show users                        # DTLS cipher = UDP w
   and issued private keys.
 - `install.sh` is idempotent and offers keep / fill-missing / regenerate when a
   `.env` already exists.
+- **Line endings are LF, pinned by `.gitattributes` (`* text=auto eol=lf`).**
+  The only target is the Linux image, so there is no case for CRLF anywhere in
+  the tree. A Windows clone with `core.autocrlf=true` would otherwise check out
+  `entrypoint.sh`, `certbot-renew.sh` and `install.sh` with CRLF, and the
+  shebang then fails inside the container with a bare
+  `no such file or directory` — which reads like a missing file, not a line
+  ending. Never add an `eol=crlf` exception.
+- **`install.sh` is tracked mode 755; the in-container scripts stay 644.**
+  `README.md` documents `./install.sh`, so it needs the exec bit in git.
+  `entrypoint.sh`, `postgres-init.sh` and `certbot-renew.sh` don't — the
+  `Dockerfile` `chmod +x`es them after `COPY`. On Windows `core.filemode` is
+  `false`, so set the bit with `git update-index --chmod=+x <file>`.
