@@ -3,8 +3,8 @@ package occtl
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/mmtaee/ocserv-users-management/common/models"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/utils"
+	"github.com/mmtaee/ocserv-dashboard/common/models"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/utils"
 	"net"
 	"os/exec"
 	"strings"

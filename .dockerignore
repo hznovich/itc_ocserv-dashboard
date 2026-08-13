@@ -1,0 +1,28 @@
+# Build artefacts and runtime data
+data/
+**/node_modules/
+**/dist/
+**/*.log
+**/.DS_Store
+
+# Local env (must NEVER end up baked into the image)
+.env
+.env.*.bak
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Documentation that doesn't belong in the image
+docs/
+TODO.md
+README.md
+
+# Test caches
+**/coverage/
+**/*.test

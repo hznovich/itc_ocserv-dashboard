@@ -84,6 +84,11 @@ export function getSidebarItems(): Menu[] {
                 icon: 'mdi-speedometer',
                 to: '/bandwidths'
             },
+            {
+                title: t('SESSION_LOGS'),
+                icon: 'mdi-timeline-text-outline',
+                to: '/session_logs'
+            },
             { header: t('LOGS') },
             {
                 title: t('SERVER'),
@@ -100,6 +105,17 @@ export function getSidebarItems(): Menu[] {
                 title: t('ACTIVITIES'),
                 icon: 'mdi-history',
                 to: '/staffs/activities'
+            },
+            { header: t('SYSTEM') },
+            {
+                title: t('SETTINGS'),
+                icon: 'mdi-cog',
+                to: '/system'
+            },
+            {
+                title: t('BACKUP'),
+                icon: 'mdi-database',
+                to: '/backup'
             }
         );
     }

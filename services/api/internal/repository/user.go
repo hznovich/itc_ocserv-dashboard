@@ -2,10 +2,10 @@ package repository
 
 import (
 	"context"
-	"github.com/mmtaee/ocserv-users-management/api/internal/models"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/crypto"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/request"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/database"
+	"github.com/mmtaee/ocserv-dashboard/api/internal/models"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/crypto"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/request"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/database"
 	"gorm.io/gorm"
 	"time"
 )

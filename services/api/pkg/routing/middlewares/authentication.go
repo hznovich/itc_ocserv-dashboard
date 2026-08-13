@@ -2,7 +2,7 @@ package middlewares
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/token"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/token"
 	"strings"
 )
 

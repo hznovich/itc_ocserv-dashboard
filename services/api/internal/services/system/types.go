@@ -1,8 +1,8 @@
 package system
 
 import (
-	"github.com/mmtaee/ocserv-users-management/api/internal/models"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/request"
+	"github.com/mmtaee/ocserv-dashboard/api/internal/models"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/request"
 )
 
 type GetSystemInitResponse struct {
@@ -10,13 +10,17 @@ type GetSystemInitResponse struct {
 }
 
 type GetSystemResponse struct {
-	GoogleCaptchaSiteKey   string `json:"google_captcha_site_key" validate:"omitempty"`
-	GoogleCaptchaSecretKey string `json:"google_captcha_secret_key" validate:"omitempty"`
+	GoogleCaptchaSiteKey    string `json:"google_captcha_site_key" validate:"omitempty"`
+	GoogleCaptchaSecretKey  string `json:"google_captcha_secret_key" validate:"omitempty"`
+	AutoDeleteInactiveUsers bool   `json:"auto_delete_inactive_users" validate:"omitempty"`
+	KeepInactiveUserDays    int    `json:"keep_inactive_user_days" validate:"omitempty"`
 }
 
 type PatchSystemUpdateData struct {
-	GoogleCaptchaSiteKey   *string `json:"google_captcha_site_key" validate:"required"`
-	GoogleCaptchaSecretKey *string `json:"google_captcha_secret_key" validate:"required"`
+	GoogleCaptchaSiteKey    *string `json:"google_captcha_site_key" validate:"required"`
+	GoogleCaptchaSecretKey  *string `json:"google_captcha_secret_key" validate:"required"`
+	AutoDeleteInactiveUsers *bool   `json:"auto_delete_inactive_users" validate:"required"`
+	KeepInactiveUserDays    *int    `json:"keep_inactive_user_days" validate:"required"`
 }
 
 type LoginData struct {
@@ -33,7 +37,7 @@ type UserLoginResponse struct {
 
 type CreateUserData struct {
 	Username string `json:"username" validate:"required"`
-	Password string `json:"password" validate:"required"`
+	Password string `json:"password" validate:"required,min=4,max=16"`
 	//Admin    bool   `json:"admin"`
 }
 
@@ -43,19 +47,21 @@ type UsersResponse struct {
 }
 
 type ChangeUserPassword struct {
-	Password string `json:"password" validate:"required"`
+	Password string `json:"password" validate:"required,min=4,max=16"`
 }
 
 type ChangeUserPasswordBySelf struct {
-	OldPassword string `json:"old_password" validate:"required"`
-	NewPassword string `json:"new_password" validate:"required"`
+	OldPassword string `json:"old_password" validate:"required,min=4,max=16"`
+	NewPassword string `json:"new_password" validate:"required,min=4,max=16"`
 }
 
 type SetupSystem struct {
-	Username               string `json:"username" validate:"required,min=2,max=16"`
-	Password               string `json:"password" validate:"required,min=4,max=16"`
-	GoogleCaptchaSiteKey   string `json:"google_captcha_site_key" validate:"omitempty"`
-	GoogleCaptchaSecretKey string `json:"google_captcha_secret_key" validate:"omitempty"`
+	Username                string `json:"username" validate:"required,min=2,max=16"`
+	Password                string `json:"password" validate:"required,min=4,max=16"`
+	GoogleCaptchaSiteKey    string `json:"google_captcha_site_key" validate:"omitempty"`
+	GoogleCaptchaSecretKey  string `json:"google_captcha_secret_key" validate:"omitempty"`
+	AutoDeleteInactiveUsers bool   `json:"auto_delete_inactive_users" validate:"omitempty"`
+	KeepInactiveUserDays    int    `json:"keep_inactive_user_days" validate:"omitempty"`
 }
 
 type SetupSystemResponse struct {

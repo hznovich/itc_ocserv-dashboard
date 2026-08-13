@@ -2,11 +2,11 @@ package stats
 
 type UserStats struct {
 	Username string
-	RX       int
-	TX       int
+	RX       int64
+	TX       int64
 }
 
 type Totals struct {
-	TotalRx int
-	TotalTx int
+	TotalRx int64
+	TotalTx int64
 }

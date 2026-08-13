@@ -1,5 +1,16 @@
 basePath: /api
 definitions:
+  backup.RestoreResponse:
+    properties:
+      existing:
+        items:
+          type: string
+        type: array
+      inserted:
+        items:
+          type: string
+        type: array
+    type: object
   customer.ModelCustomer:
     properties:
       deactivated_at:
@@ -483,6 +494,29 @@ definitions:
           type: string
         type: array
     type: object
+  models.OcservUserSessionLog:
+    properties:
+      created_at:
+        type: string
+      event:
+        enum:
+        - user-agent
+        - handshake
+        - periodic-stats
+        - disconnect
+        type: string
+      ip:
+        type: string
+      message:
+        type: string
+      username:
+        type: string
+    required:
+    - created_at
+    - event
+    - message
+    - username
+    type: object
   models.OnlineUserSession:
     properties:
       _Connected at:
@@ -507,10 +541,14 @@ definitions:
     properties:
       _:
         type: integer
+      auto_delete_inactive_users:
+        type: boolean
       google_captcha_secret:
         type: string
       google_captcha_site_key:
         type: string
+      keep_inactive_user_days:
+        type: integer
     type: object
   models.User:
     properties:
@@ -616,6 +654,10 @@ definitions:
         - TotallyReceive
         example: MonthlyTransmit
         type: string
+      unlimited:
+        default: false
+        example: false
+        type: boolean
       username:
         maxLength: 32
         minLength: 2
@@ -645,6 +687,17 @@ definitions:
       result:
         items:
           $ref: '#/definitions/user.Ocpasswd'
+        type: array
+    required:
+    - meta
+    type: object
+  ocserv_user.SessionLogsResponse:
+    properties:
+      meta:
+        $ref: '#/definitions/request.Meta'
+      result:
+        items:
+          $ref: '#/definitions/models.OcservUserSessionLog'
         type: array
     required:
     - meta
@@ -725,6 +778,32 @@ definitions:
         - TotallyReceive
         example: MonthlyTransmit
         type: string
+      unlimited:
+        default: false
+        example: false
+        type: boolean
+    type: object
+  report.OcservUserReportResponse:
+    properties:
+      active:
+        type: integer
+      deactivated:
+        type: integer
+      locked:
+        type: integer
+      online:
+        type: integer
+    type: object
+  report.SessionLogsResponse:
+    properties:
+      meta:
+        $ref: '#/definitions/request.Meta'
+      result:
+        items:
+          $ref: '#/definitions/models.OcservUserSessionLog'
+        type: array
+    required:
+    - meta
     type: object
   repository.TopBandwidthUsers:
     properties:
@@ -777,6 +856,8 @@ definitions:
   system.ChangeUserPassword:
     properties:
       password:
+        maxLength: 16
+        minLength: 4
         type: string
     required:
     - password
@@ -784,8 +865,12 @@ definitions:
   system.ChangeUserPasswordBySelf:
     properties:
       new_password:
+        maxLength: 16
+        minLength: 4
         type: string
       old_password:
+        maxLength: 16
+        minLength: 4
         type: string
     required:
     - new_password
@@ -794,6 +879,8 @@ definitions:
   system.CreateUserData:
     properties:
       password:
+        maxLength: 16
+        minLength: 4
         type: string
       username:
         type: string
@@ -808,10 +895,14 @@ definitions:
     type: object
   system.GetSystemResponse:
     properties:
+      auto_delete_inactive_users:
+        type: boolean
       google_captcha_secret_key:
         type: string
       google_captcha_site_key:
         type: string
+      keep_inactive_user_days:
+        type: integer
     type: object
   system.LoginData:
     properties:
@@ -835,20 +926,30 @@ definitions:
     type: object
   system.PatchSystemUpdateData:
     properties:
+      auto_delete_inactive_users:
+        type: boolean
       google_captcha_secret_key:
         type: string
       google_captcha_site_key:
         type: string
+      keep_inactive_user_days:
+        type: integer
     required:
+    - auto_delete_inactive_users
     - google_captcha_secret_key
     - google_captcha_site_key
+    - keep_inactive_user_days
     type: object
   system.SetupSystem:
     properties:
+      auto_delete_inactive_users:
+        type: boolean
       google_captcha_secret_key:
         type: string
       google_captcha_site_key:
         type: string
+      keep_inactive_user_days:
+        type: integer
       password:
         maxLength: 16
         minLength: 4
@@ -908,6 +1009,173 @@ info:
   title: Ocserv User management Example Api
   version: "1.0"
 paths:
+  /backup/ocserv_groups:
+    get:
+      description: Download gzip compressed JSON backup of all ocserv groups including
+        default group configuration
+      parameters:
+      - description: Bearer TOKEN
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      - application/gzip
+      responses:
+        "200":
+          description: ocserv_groups_backup.json.gz
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/request.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/middlewares.Unauthorized'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/middlewares.PermissionDenied'
+      summary: Backup ocserv groups
+      tags:
+      - System(Backup)
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload JSON or gzip-compressed (.json.gz) backup of ocserv groups
+      parameters:
+      - description: Bearer TOKEN
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: JSON or JSON.GZ file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.RestoreResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/request.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/middlewares.Unauthorized'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/middlewares.PermissionDenied'
+      summary: Restore ocserv groups
+      tags:
+      - System(Restore)
+  /backup/ocserv_users:
+    get:
+      description: Download gzip compressed JSON backup of all ocserv users
+      parameters:
+      - description: Bearer TOKEN
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      - application/gzip
+      responses:
+        "200":
+          description: ocserv_users_backup.json.gz
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/request.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/middlewares.Unauthorized'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/middlewares.PermissionDenied'
+      summary: Backup ocserv users
+      tags:
+      - System(Backup)
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload JSON or gzip-compressed (.json.gz) backup of ocserv users
+      parameters:
+      - description: Bearer TOKEN
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: JSON or JSON.GZ file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.RestoreResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/request.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/middlewares.Unauthorized'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/middlewares.PermissionDenied'
+      summary: Restore ocserv users
+      tags:
+      - System(Restore)
+  /customers/disconnect_sessions:
+    post:
+      consumes:
+      - application/json
+      description: disconnects all online sessions for a customer
+      parameters:
+      - description: customer username and password (same ocserv account).
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/customer.SummaryData'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/request.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/middlewares.TooManyRequests'
+      summary: Disconnect all online sessions of a customer
+      tags:
+      - Customers
   /customers/summary:
     post:
       consumes:
@@ -1407,6 +1675,15 @@ paths:
         minLength: 2
         name: q
         type: string
+      - description: filter ocserv user by statues
+        enum:
+        - online
+        - active
+        - deactivated
+        - locked
+        in: query
+        name: filter
+        type: string
       - description: Bearer TOKEN
         in: header
         name: Authorization
@@ -1638,6 +1915,70 @@ paths:
       summary: Ocserv User locking
       tags:
       - Ocserv(Users)
+  /ocserv/users/{uid}/session_logs:
+    get:
+      consumes:
+      - application/json
+      description: Ocserv User session logs
+      parameters:
+      - description: Bearer TOKEN
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Page number, starting from 1
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - description: Number of items per page
+        in: query
+        maximum: 100
+        minimum: 1
+        name: size
+        type: integer
+      - description: Field to order by
+        in: query
+        name: order
+        type: string
+      - description: Sort order, either ASC or DESC
+        enum:
+        - ASC
+        - DESC
+        in: query
+        name: sort
+        type: string
+      - description: Ocserv User UID
+        in: path
+        name: uid
+        required: true
+        type: string
+      - description: date_start
+        in: query
+        name: date_start
+        type: string
+      - description: date_end
+        in: query
+        name: date_end
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ocserv_user.SessionLogsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/request.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/middlewares.Unauthorized'
+      summary: Ocserv User session logs
+      tags:
+      - Ocserv(Users)
   /ocserv/users/{uid}/statistics:
     get:
       consumes:
@@ -1832,7 +2173,66 @@ paths:
       summary: Ocserv Users from ocpasswd file to db
       tags:
       - Ocserv(Ocpasswd)
-  /ocserv/users/statistics:
+  /reports/session_logs:
+    get:
+      consumes:
+      - application/json
+      description: Ocserv session logs
+      parameters:
+      - description: Bearer TOKEN
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Page number, starting from 1
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - description: Number of items per page
+        in: query
+        maximum: 100
+        minimum: 1
+        name: size
+        type: integer
+      - description: Field to order by
+        in: query
+        name: order
+        type: string
+      - description: Sort order, either ASC or DESC
+        enum:
+        - ASC
+        - DESC
+        in: query
+        name: sort
+        type: string
+      - description: date_start
+        in: query
+        name: date_start
+        type: string
+      - description: date_end
+        in: query
+        name: date_end
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/report.SessionLogsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/request.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/middlewares.Unauthorized'
+      summary: Ocserv session logs
+      tags:
+      - Report
+  /reports/statistics:
     get:
       consumes:
       - application/json
@@ -1872,8 +2272,8 @@ paths:
             $ref: '#/definitions/middlewares.Unauthorized'
       summary: Ocserv Users Statistics
       tags:
-      - Ocserv(Statistics)
-  /ocserv/users/total-bandwidth:
+      - Report
+  /reports/total-bandwidth:
     get:
       consumes:
       - application/json
@@ -1911,7 +2311,36 @@ paths:
             $ref: '#/definitions/middlewares.Unauthorized'
       summary: Ocserv Users TotalBandwidth calculating
       tags:
-      - Ocserv(Bandwidth)
+      - Report
+  /reports/users:
+    get:
+      consumes:
+      - application/json
+      description: Result of all user reports
+      parameters:
+      - description: Bearer TOKEN
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/report.OcservUserReportResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/request.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/middlewares.Unauthorized'
+      summary: Result of all user reports
+      tags:
+      - Report
   /system:
     get:
       consumes:

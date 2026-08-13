@@ -2,18 +2,19 @@ package home
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/mmtaee/ocserv-users-management/api/internal/repository"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/request"
-	"github.com/mmtaee/ocserv-users-management/common/models"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/logger"
+	"github.com/mmtaee/ocserv-dashboard/api/internal/repository"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/request"
+	"github.com/mmtaee/ocserv-dashboard/common/models"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/logger"
+	"golang.org/x/sync/errgroup"
 	"net/http"
-	"sync"
 )
 
 type Controller struct {
 	request        request.CustomRequestInterface
 	occtlRepo      repository.OcctlRepositoryInterface
 	ocservUserRepo repository.OcservUserRepositoryInterface
+	reportRepo     repository.ReportRepositoryInterface
 }
 
 func New() *Controller {
@@ -21,6 +22,7 @@ func New() *Controller {
 		request:        request.NewCustomRequest(),
 		occtlRepo:      repository.NewOcctlRepository(),
 		ocservUserRepo: repository.NewtOcservUserRepository(),
+		reportRepo:     repository.NewtReportRepository(),
 	}
 }
 
@@ -36,6 +38,13 @@ func New() *Controller {
 // @Failure      401 {object} middlewares.Unauthorized
 // @Success      200  {object} GetHomeResponse
 // @Router       /home [get]
+//
+// Implementation note:
+// The previous version used a buffered error channel of size 4 with 7 goroutines —
+// if more than 4 of them returned an error simultaneously, the extra senders blocked
+// on `errs <- err` forever and the request never completed. We now use errgroup,
+// which is the idiomatic Go pattern for "fan out N tasks, collect first error, wait
+// for all". errgroup also propagates ctx cancellation if the request is aborted.
 func (ctl *Controller) Home(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -43,92 +52,80 @@ func (ctl *Controller) Home(c echo.Context) error {
 		status           ServerStatusResponse
 		statistics       *[]models.DailyTraffic
 		onlineUsers      *[]models.OnlineUserSession
-		TotalUser        int64
+		totalUsers       int64
 		ipBans           *[]models.IPBanPoints
 		topBandwidthUser repository.TopBandwidthUsers
 		totalBandwidth   repository.TotalBandwidths
-		errs             = make(chan error, 4)
-		wg               sync.WaitGroup
 	)
 
-	wg.Add(7)
+	g, gctx := errgroup.WithContext(ctx)
 
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		serverStatus, err := ctl.occtlRepo.Status()
 		if err != nil {
-			errs <- err
-			return
+			return err
 		}
-		if serverStatusMap, ok := serverStatus.(map[string]interface{}); ok {
-			status = ParseServerStatus(serverStatusMap)
+		if m, ok := serverStatus.(map[string]interface{}); ok {
+			status = ParseServerStatus(m)
 		}
-	}()
+		return nil
+	})
 
-	go func() {
-		defer wg.Done()
-		data, err := ctl.ocservUserRepo.TenDaysStats(ctx)
+	g.Go(func() error {
+		data, err := ctl.reportRepo.TenDaysStats(gctx)
 		if err != nil {
-			errs <- err
-			return
+			return err
 		}
 		statistics = &data
-	}()
+		return nil
+	})
 
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		users, err := ctl.occtlRepo.OnlineUsersInfo()
 		if err != nil {
-			errs <- err
-			return
+			return err
 		}
 		onlineUsers = users
-	}()
+		return nil
+	})
 
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		ips, err := ctl.occtlRepo.IPBans()
 		if err != nil {
-			errs <- err
-			return
+			return err
 		}
 		ipBans = ips
-	}()
+		return nil
+	})
 
-	go func() {
-		defer wg.Done()
-		users, err := ctl.ocservUserRepo.TotalUsers(ctx)
+	g.Go(func() error {
+		users, err := ctl.reportRepo.TotalUsers(gctx)
 		if err != nil {
-			errs <- err
-			return
+			return err
 		}
-		TotalUser = users
-	}()
+		totalUsers = users
+		return nil
+	})
 
-	go func() {
-		defer wg.Done()
-		topUser, err := ctl.ocservUserRepo.TopBandwidthUser(ctx)
+	g.Go(func() error {
+		topUser, err := ctl.reportRepo.TopBandwidthUser(gctx)
 		if err != nil {
-			errs <- err
-			return
+			return err
 		}
 		topBandwidthUser = topUser
-	}()
+		return nil
+	})
 
-	go func() {
-		defer wg.Done()
-		bandwidth, err := ctl.ocservUserRepo.TotalBandwidth(ctx)
+	g.Go(func() error {
+		bandwidth, err := ctl.reportRepo.TotalBandwidth(gctx)
 		if err != nil {
-			errs <- err
-			return
+			return err
 		}
 		totalBandwidth = bandwidth
-	}()
+		return nil
+	})
 
-	wg.Wait()
-	close(errs)
-
-	if err := <-errs; err != nil {
+	if err := g.Wait(); err != nil {
 		logger.Warn("error in Home handler: %v", err)
 		return ctl.request.BadRequest(c, err)
 	}
@@ -138,7 +135,7 @@ func (ctl *Controller) Home(c echo.Context) error {
 		Statistics:   statistics,
 		IPBans:       ipBans,
 		Users: GetHomeUser{
-			Total:  TotalUser,
+			Total:  totalUsers,
 			Online: onlineUsers,
 		},
 		TopBandwidthUser: topBandwidthUser,

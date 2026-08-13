@@ -67,6 +67,12 @@ export interface OcservUserCreateOcservUserData {
     'traffic_type': OcservUserCreateOcservUserDataTrafficTypeEnum;
     /**
      * 
+     * @type {boolean}
+     * @memberof OcservUserCreateOcservUserData
+     */
+    'unlimited'?: boolean;
+    /**
+     * 
      * @type {string}
      * @memberof OcservUserCreateOcservUserData
      */

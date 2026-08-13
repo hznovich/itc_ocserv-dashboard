@@ -1,14 +1,18 @@
 package ocserv_user
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/labstack/echo/v4"
-	"github.com/mmtaee/ocserv-users-management/api/internal/repository"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/request"
-	"github.com/mmtaee/ocserv-users-management/common/models"
-	"github.com/mmtaee/ocserv-users-management/common/ocserv/user"
+	"github.com/mmtaee/ocserv-dashboard/api/internal/repository"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/request"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/routing/middlewares"
+	"github.com/mmtaee/ocserv-dashboard/common/models"
+	"github.com/mmtaee/ocserv-dashboard/common/ocserv/user"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/logger"
 	"golang.org/x/sync/errgroup"
+	"gorm.io/gorm"
 	"net/http"
 	"slices"
 	"sync"
@@ -20,6 +24,7 @@ type Controller struct {
 	userRepo        repository.UserRepositoryInterface
 	ocservUserRepo  repository.OcservUserRepositoryInterface
 	ocservOcctlRepo repository.OcctlRepositoryInterface
+	reportRepo      repository.ReportRepositoryInterface
 }
 
 func New() *Controller {
@@ -27,7 +32,56 @@ func New() *Controller {
 		request:         request.NewCustomRequest(),
 		ocservUserRepo:  repository.NewtOcservUserRepository(),
 		ocservOcctlRepo: repository.NewOcctlRepository(),
+		reportRepo:      repository.NewtReportRepository(),
 	}
+}
+
+// errOwnerMismatch is returned by ownership checks when a non-admin caller
+// references an OcservUser that belongs to someone else.
+var errOwnerMismatch = errors.New("ocserv user belongs to a different owner")
+
+// loadOwnedByUID fetches an OcservUser by UID and enforces that the caller
+// either is an admin or is the user's owner. This closes the IDOR gap that
+// existed across Get/Update/Delete/Lock/Unlock/Disconnect/Statistics/SessionLogs:
+// previously the list endpoint filtered by owner for non-admins, but every
+// per-record endpoint accepted any UID and operated on it regardless of owner.
+//
+// The function returns:
+//   - (*OcservUser, nil)            on success
+//   - (nil, errOwnerMismatch)       when caller is not admin and not the owner
+//   - (nil, gorm.ErrRecordNotFound) when the UID does not exist
+//   - (nil, otherErr)               on other DB errors
+//
+// Handlers should map errOwnerMismatch to HTTP 403, ErrRecordNotFound to 404,
+// and everything else to 400.
+func (ctl *Controller) loadOwnedByUID(c echo.Context, uid string) (*models.OcservUser, error) {
+	u, err := ctl.ocservUserRepo.GetByUID(c.Request().Context(), uid)
+	if err != nil {
+		return nil, err
+	}
+	if isAdmin, _ := c.Get("isAdmin").(bool); isAdmin {
+		return u, nil
+	}
+	caller, _ := c.Get("username").(string)
+	// We compare against u.Owner. Empty caller (shouldn't happen given
+	// AuthMiddleware) is treated as a mismatch — fail closed.
+	if caller == "" || u.Owner != caller {
+		return nil, errOwnerMismatch
+	}
+	return u, nil
+}
+
+// ownershipError converts errOwnerMismatch / ErrRecordNotFound into the
+// matching HTTP responses, returning a non-nil error iff the caller should
+// stop processing and propagate it.
+func (ctl *Controller) ownershipError(c echo.Context, err error) error {
+	if errors.Is(err, errOwnerMismatch) {
+		return middlewares.PermissionDeniedError(c, "you do not own this ocserv user")
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "ocserv user not found"})
+	}
+	return ctl.request.BadRequest(c, err)
 }
 
 // OcservUsers 	 List of Ocserv Users
@@ -42,6 +96,7 @@ func New() *Controller {
 // @Param 		 order query string false "Field to order by"
 // @Param 		 sort query string false "Sort order, either ASC or DESC" Enums(ASC, DESC)
 // @Param 		 q query string false "ocserv username q search" minLength(2)
+// @Param 		 filter query string false "filter ocserv user by statues" Enums(online, active, deactivated, locked)
 // @Param        Authorization header string true "Bearer TOKEN"
 // @Failure      400 {object} request.ErrorResponse
 // @Failure      401 {object} middlewares.Unauthorized
@@ -49,39 +104,87 @@ func New() *Controller {
 // @Router       /ocserv/users [get]
 func (ctl *Controller) OcservUsers(c echo.Context) error {
 	owner := ""
-	if isAdmin := c.Get("isAdmin").(bool); !isAdmin {
-		username := c.Get("username").(string)
-		if username == "" {
+
+	val, ok := c.Get("isAdmin").(bool)
+	if !ok || !val {
+		usernameVal, ok := c.Get("username").(string)
+		if !ok || usernameVal == "" {
 			return ctl.request.BadRequest(c, errors.New("invalid user uid"))
 		}
-		owner = username
+		owner = usernameVal
 	}
-
-	pagination := ctl.request.Pagination(c)
 
 	q := c.QueryParam("q")
+	pagination := ctl.request.Pagination(c)
 
-	ocservUsers, total, err := ctl.ocservUserRepo.Users(c.Request().Context(), pagination, owner, q)
-	if err != nil {
-		return ctl.request.BadRequest(c, err)
+	filter := c.QueryParam("filter")
+	switch filter {
+	case "online", "active", "deactivated", "locked":
+	default:
+		filter = ""
 	}
 
-	if len(ocservUsers) > 0 {
-		onlineUsers, err := ctl.ocservOcctlRepo.OnlineUsers()
+	ctx := c.Request().Context()
 
+	// -------------------------
+	// ONLINE FILTER MODE
+	// -------------------------
+	if filter == "online" {
+		onlineUsers, err := ctl.ocservOcctlRepo.OnlineUsers()
 		if err != nil {
 			return ctl.request.BadRequest(c, err)
 		}
 
-		// it change O(n²) to O(n) for user count grows
+		users, total, err := ctl.ocservUserRepo.UsersByUsername(
+			ctx,
+			pagination,
+			owner,
+			onlineUsers,
+			q,
+		)
+		if err != nil {
+			return ctl.request.BadRequest(c, err)
+		}
+
+		return c.JSON(http.StatusOK, OcservUsersResponse{
+			Meta: request.Meta{
+				Page:         pagination.Page,
+				TotalRecords: total,
+				PageSize:     pagination.PageSize,
+			},
+			Result: users,
+		})
+	}
+
+	// -------------------------
+	// NORMAL MODE
+	// -------------------------
+	users, total, err := ctl.ocservUserRepo.Users(
+		ctx,
+		pagination,
+		owner,
+		q,
+		filter,
+	)
+	if err != nil {
+		return ctl.request.BadRequest(c, err)
+	}
+
+	// attach online status
+	if len(users) > 0 {
+		onlineUsers, err := ctl.ocservOcctlRepo.OnlineUsers()
+		if err != nil {
+			return ctl.request.BadRequest(c, err)
+		}
+
 		onlineMap := make(map[string]struct{}, len(onlineUsers))
 		for _, u := range onlineUsers {
 			onlineMap[u] = struct{}{}
 		}
 
-		for i := range ocservUsers {
-			if _, ok := onlineMap[ocservUsers[i].Username]; ok {
-				ocservUsers[i].IsOnline = true
+		for i := range users {
+			if _, ok := onlineMap[users[i].Username]; ok {
+				users[i].IsOnline = true
 			}
 		}
 	}
@@ -92,7 +195,7 @@ func (ctl *Controller) OcservUsers(c echo.Context) error {
 			TotalRecords: total,
 			PageSize:     pagination.PageSize,
 		},
-		Result: ocservUsers,
+		Result: users,
 	})
 }
 
@@ -110,15 +213,14 @@ func (ctl *Controller) OcservUsers(c echo.Context) error {
 // @Success      200  {object}  models.OcservUser
 // @Router       /ocserv/users/{uid} [get]
 func (ctl *Controller) OcservUser(c echo.Context) error {
-	// TODO: add staff filter to get ocserv user for same owner
 	userUID := c.Param("uid")
 	if userUID == "" {
 		return ctl.request.BadRequest(c, errors.New("invalid user uid"))
 	}
 
-	u, err := ctl.ocservUserRepo.GetByUID(c.Request().Context(), userUID)
+	u, err := ctl.loadOwnedByUID(c, userUID)
 	if err != nil {
-		return ctl.request.BadRequest(c, err)
+		return ctl.ownershipError(c, err)
 	}
 	return c.JSON(http.StatusOK, u)
 }
@@ -148,9 +250,17 @@ func (ctl *Controller) CreateOcservUser(c echo.Context) error {
 		return ctl.request.BadRequest(c, err)
 	}
 
-	expireAt, err := time.Parse("2006-01-02", data.ExpireAt)
-	if err != nil {
-		expireAt, _ = time.Parse("2006-01-02", time.Now().AddDate(0, 0, 30).Format("2006-01-02"))
+	var expireAt *time.Time
+	if data.Unlimited {
+		expireAt = nil
+	} else {
+		expireAtTime, err := time.Parse("2006-01-02", data.ExpireAt)
+		if err != nil {
+			t := time.Now().AddDate(0, 0, 30)
+			expireAt = &t
+		} else {
+			expireAt = &expireAtTime
+		}
 	}
 
 	if data.TrafficType == models.Free {
@@ -162,7 +272,7 @@ func (ctl *Controller) CreateOcservUser(c echo.Context) error {
 		Username:    data.Username,
 		Password:    data.Password,
 		Group:       data.Group,
-		ExpireAt:    &expireAt,
+		ExpireAt:    expireAt,
 		TrafficSize: data.TrafficSize,
 		TrafficType: data.TrafficType,
 		Config:      data.Config,
@@ -201,9 +311,9 @@ func (ctl *Controller) UpdateOcservUser(c echo.Context) error {
 		return ctl.request.BadRequest(c, err)
 	}
 
-	ocservUser, err := ctl.ocservUserRepo.GetByUID(c.Request().Context(), userID)
+	ocservUser, err := ctl.loadOwnedByUID(c, userID)
 	if err != nil {
-		return ctl.request.BadRequest(c, err)
+		return ctl.ownershipError(c, err)
 	}
 
 	if data.Group != nil {
@@ -224,9 +334,11 @@ func (ctl *Controller) UpdateOcservUser(c echo.Context) error {
 	if data.Config != nil {
 		ocservUser.Config = data.Config
 	}
-	if data.ExpireAt != nil {
-		expire, err := time.Parse("2006-01-02", *data.ExpireAt)
-		if err == nil {
+
+	if data.Unlimited {
+		ocservUser.ExpireAt = nil
+	} else if data.ExpireAt != nil {
+		if expire, err := time.Parse("2006-01-02", *data.ExpireAt); err == nil {
 			ocservUser.ExpireAt = &expire
 		}
 	}
@@ -255,6 +367,10 @@ func (ctl *Controller) DeleteOcservUser(c echo.Context) error {
 	userID := c.Param("uid")
 	if userID == "" {
 		return ctl.request.BadRequest(c, errors.New("user id is required"))
+	}
+
+	if _, err := ctl.loadOwnedByUID(c, userID); err != nil {
+		return ctl.ownershipError(c, err)
 	}
 
 	username, err := ctl.ocservUserRepo.Delete(c.Request().Context(), userID)
@@ -288,10 +404,30 @@ func (ctl *Controller) LockOcservUser(c echo.Context) error {
 		return ctl.request.BadRequest(c, errors.New("user id is required"))
 	}
 
+	if _, err := ctl.loadOwnedByUID(c, userID); err != nil {
+		return ctl.ownershipError(c, err)
+	}
+
 	err := ctl.ocservUserRepo.Lock(c.Request().Context(), userID)
 	if err != nil {
 		return ctl.request.BadRequest(c, err)
 	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		u, err := ctl.ocservUserRepo.GetByUID(ctx, userID)
+		if err != nil {
+			logger.Error("failed to fetch ocserv user error: ", err)
+		}
+		_, err = ctl.ocservOcctlRepo.Disconnect(u.Username)
+		if err != nil {
+			logger.Error("failed to disconnect ocserv user error: ", err)
+		}
+		return
+	}()
+
 	return c.JSON(http.StatusOK, nil)
 }
 
@@ -312,6 +448,10 @@ func (ctl *Controller) UnLockOcservUser(c echo.Context) error {
 	userID := c.Param("uid")
 	if userID == "" {
 		return ctl.request.BadRequest(c, errors.New("user id is required"))
+	}
+
+	if _, err := ctl.loadOwnedByUID(c, userID); err != nil {
+		return ctl.ownershipError(c, err)
 	}
 
 	err := ctl.ocservUserRepo.UnLock(c.Request().Context(), userID)
@@ -339,14 +479,32 @@ func (ctl *Controller) DisconnectOcservUser(c echo.Context) error {
 	if username == "" {
 		return ctl.request.BadRequest(c, errors.New("user id is required"))
 	}
-	_, err := ctl.ocservOcctlRepo.Disconnect(username)
+
+	// Disconnect is keyed by username (occtl operates on usernames), so we
+	// look the row up by username and run the same owner check as for UID-based
+	// endpoints. This prevents staff users from disconnecting users that
+	// belong to other operators/admins.
+	u, err := ctl.ocservUserRepo.GetByUsername(c.Request().Context(), username)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "ocserv user not found"})
+		}
+		return ctl.request.BadRequest(c, err)
+	}
+	if isAdmin, _ := c.Get("isAdmin").(bool); !isAdmin {
+		caller, _ := c.Get("username").(string)
+		if caller == "" || u.Owner != caller {
+			return middlewares.PermissionDeniedError(c, "you do not own this ocserv user")
+		}
+	}
+
+	if _, err := ctl.ocservOcctlRepo.Disconnect(username); err != nil {
 		return ctl.request.BadRequest(c, err)
 	}
 	return c.JSON(http.StatusOK, nil)
 }
 
-// StatisticsOcservUser 	     Ocserv User Statistics
+// OcservUserStatistics 	     Ocserv User Statistics
 //
 // @Summary      Ocserv User Statistics
 // @Description  Ocserv User Statistics
@@ -361,10 +519,14 @@ func (ctl *Controller) DisconnectOcservUser(c echo.Context) error {
 // @Failure      401 {object} middlewares.Unauthorized
 // @Success      200  {object} StatisticsResponse
 // @Router       /ocserv/users/{uid}/statistics [get]
-func (ctl *Controller) StatisticsOcservUser(c echo.Context) error {
+func (ctl *Controller) OcservUserStatistics(c echo.Context) error {
 	userID := c.Param("uid")
 	if userID == "" {
 		return ctl.request.BadRequest(c, errors.New("user id is required"))
+	}
+
+	if _, err := ctl.loadOwnedByUID(c, userID); err != nil {
+		return ctl.ownershipError(c, err)
 	}
 
 	var data StatisticsData
@@ -409,7 +571,7 @@ func (ctl *Controller) StatisticsOcservUser(c echo.Context) error {
 	})
 
 	g.Go(func() error {
-		t, err := ctl.ocservUserRepo.TotalBandwidthUser(ctx, userID)
+		t, err := ctl.reportRepo.TotalBandWidthUser(ctx, userID)
 		if err != nil {
 			return err
 		}
@@ -425,106 +587,6 @@ func (ctl *Controller) StatisticsOcservUser(c echo.Context) error {
 		Statistics:      stats,
 		TotalBandwidths: total,
 	})
-}
-
-// Statistics 	 Ocserv Users Statistics
-//
-// @Summary      Ocserv Users Statistics
-// @Description  Ocserv Users Statistics
-// @Tags         Ocserv(Statistics)
-// @Accept       json
-// @Produce      json
-// @Param        Authorization header string true "Bearer TOKEN"
-// @Param 		 date_start query string true "date_start"
-// @Param 		 date_end query string true "date_end"
-// @Failure      400 {object} request.ErrorResponse
-// @Failure      401 {object} middlewares.Unauthorized
-// @Success      200 {object} []models.DailyTraffic
-// @Router       /ocserv/users/statistics [get]
-func (ctl *Controller) Statistics(c echo.Context) error {
-	var data StatisticsData
-	if err := c.Bind(&data); err != nil {
-		return ctl.request.BadRequest(c, err)
-	}
-
-	if data.DateStart == "" || data.DateEnd == "" {
-		return ctl.request.BadRequest(c, errors.New("statistics date start and end are required"))
-	}
-
-	var startDate, endDate *time.Time
-
-	tStart, err := time.Parse("2006-01-02", data.DateStart)
-	if err != nil {
-		return ctl.request.BadRequest(c, fmt.Errorf("invalid date_start: %w", err))
-	}
-	startDate = &tStart
-
-	tEnd, err := time.Parse("2006-01-02", data.DateEnd)
-	if err != nil {
-		return ctl.request.BadRequest(c, fmt.Errorf("invalid date_end: %w", err))
-	}
-	tEnd = tEnd.Add(23*time.Hour + 59*time.Minute + 59*time.Second + 999999999*time.Nanosecond)
-	endDate = &tEnd
-
-	if tStart.After(*endDate) {
-		return ctl.request.BadRequest(c, errors.New("date start is after end"))
-	}
-
-	stats, err := ctl.ocservUserRepo.Statistics(c.Request().Context(), startDate, endDate)
-	if err != nil {
-		return ctl.request.BadRequest(c, err)
-	}
-	return c.JSON(http.StatusOK, stats)
-}
-
-// TotalBandwidth 	 Ocserv Users TotalBandwidth calculating
-//
-// @Summary      Ocserv Users TotalBandwidth calculating
-// @Description  Ocserv Users TotalBandwidth calculating
-// @Tags         Ocserv(Bandwidth)
-// @Accept       json
-// @Produce      json
-// @Param        Authorization header string true "Bearer TOKEN"
-// @Param 		 date_start query string true "date_start"
-// @Param 		 date_end query string true "date_end"
-// @Failure      400 {object} request.ErrorResponse
-// @Failure      401 {object} middlewares.Unauthorized
-// @Success      200 {object} repository.TotalBandwidths
-// @Router       /ocserv/users/total-bandwidth [get]
-func (ctl *Controller) TotalBandwidth(c echo.Context) error {
-	var data TotalBandwidthData
-	if err := c.Bind(&data); err != nil {
-		return ctl.request.BadRequest(c, err)
-	}
-
-	var startDate, endDate *time.Time
-
-	if data.DateStart != "" {
-		t, err := time.Parse("2006-01-02", data.DateStart)
-		if err != nil {
-			return ctl.request.BadRequest(c, fmt.Errorf("invalid date_start: %w", err))
-		}
-		startDate = &t
-	}
-
-	if data.DateEnd != "" {
-		t, err := time.Parse("2006-01-02", data.DateEnd)
-		if err != nil {
-			return ctl.request.BadRequest(c, fmt.Errorf("invalid date_end: %w", err))
-		}
-		t = t.Add(23*time.Hour + 59*time.Minute + 59*time.Second + 999999999*time.Nanosecond)
-		endDate = &t
-	}
-
-	if startDate != nil && endDate != nil && startDate.After(*endDate) {
-		return ctl.request.BadRequest(c, errors.New("date start is after end"))
-	}
-
-	bandwidth, err := ctl.ocservUserRepo.TotalBandwidthDateRange(c.Request().Context(), startDate, endDate)
-	if err != nil {
-		return ctl.request.BadRequest(c, err)
-	}
-	return c.JSON(http.StatusOK, bandwidth)
 }
 
 // OcpasswdUsers  Ocserv Users from ocpasswd file
@@ -656,19 +718,23 @@ func (ctl *Controller) ActivateExpiredOcservUsers(c echo.Context) error {
 		return ctl.request.BadRequest(c, errors.New("user id is required"))
 	}
 
+	if _, err := ctl.loadOwnedByUID(c, userID); err != nil {
+		return ctl.ownershipError(c, err)
+	}
+
 	var data ActivateUserData
 	if err := ctl.request.DoValidate(c, &data); err != nil {
 		return ctl.request.BadRequest(c, err)
 	}
 
 	var (
-		expireAt time.Time
+		expireAt *time.Time
 		err      error
 	)
 	if data.ExpireAt != nil {
-		expireAt, err = time.Parse("2006-01-02", *data.ExpireAt)
-		if err != nil {
-			return ctl.request.BadRequest(c, fmt.Errorf("invalid expire_at: %w", err))
+		expireAtTime, err := time.Parse("2006-01-02", *data.ExpireAt)
+		if err == nil {
+			expireAt = &expireAtTime
 		}
 	}
 
@@ -678,4 +744,75 @@ func (ctl *Controller) ActivateExpiredOcservUsers(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, nil)
+}
+
+// OcservUserSessionLogs 	     Ocserv User session logs
+//
+// @Summary      Ocserv User session logs
+// @Description  Ocserv User session logs
+// @Tags         Ocserv(Users)
+// @Accept       json
+// @Produce      json
+// @Param        Authorization header string true "Bearer TOKEN"
+// @Param 		 page query int false "Page number, starting from 1" minimum(1)
+// @Param 		 size query int false "Number of items per page" minimum(1) maximum(100) name(size)
+// @Param 		 order query string false "Field to order by"
+// @Param 		 sort query string false "Sort order, either ASC or DESC" Enums(ASC, DESC)
+// @Param 		 uid path string true "Ocserv User UID"
+// @Param 		 date_start query string false "date_start"
+// @Param 		 date_end query string false "date_end"
+// @Failure      400 {object} request.ErrorResponse
+// @Failure      401 {object} middlewares.Unauthorized
+// @Success      200  {object} SessionLogsResponse
+// @Router       /ocserv/users/{uid}/session_logs [get]
+func (ctl *Controller) OcservUserSessionLogs(c echo.Context) error {
+	userID := c.Param("uid")
+	if userID == "" {
+		return ctl.request.BadRequest(c, errors.New("user id is required"))
+	}
+
+	var data SessionLogsData
+	if err := c.Bind(&data); err != nil {
+		return ctl.request.BadRequest(c, err)
+	}
+
+	pagination := ctl.request.Pagination(c)
+
+	var startDate, endDate *time.Time
+
+	if data.DateStart != "" {
+		t, err := time.Parse("2006-01-02", data.DateStart)
+		if err != nil {
+			return ctl.request.BadRequest(c, fmt.Errorf("invalid date_start: %w", err))
+		}
+		startDate = &t
+	}
+
+	if data.DateEnd != "" {
+		t, err := time.Parse("2006-01-02", data.DateEnd)
+		if err != nil {
+			return ctl.request.BadRequest(c, fmt.Errorf("invalid date_end: %w", err))
+		}
+		t = t.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+		endDate = &t
+	}
+
+	u, err := ctl.loadOwnedByUID(c, userID)
+	if err != nil {
+		return ctl.ownershipError(c, err)
+	}
+
+	logs, total, err := ctl.ocservUserRepo.UserSessionLogs(c.Request().Context(), pagination, u.Username, startDate, endDate)
+	if err != nil {
+		return ctl.request.BadRequest(c, err)
+	}
+
+	return c.JSON(http.StatusOK, SessionLogsResponse{
+		Meta: request.Meta{
+			Page:         pagination.Page,
+			TotalRecords: total,
+			PageSize:     pagination.PageSize,
+		},
+		Result: logs,
+	})
 }

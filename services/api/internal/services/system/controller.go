@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"github.com/labstack/echo/v4"
-	"github.com/mmtaee/ocserv-users-management/api/internal/models"
-	"github.com/mmtaee/ocserv-users-management/api/internal/repository"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/captcha"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/crypto"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/request"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/routing/middlewares"
+	"github.com/mmtaee/ocserv-dashboard/api/internal/models"
+	"github.com/mmtaee/ocserv-dashboard/api/internal/repository"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/captcha"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/crypto"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/request"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/routing/middlewares"
 	"gorm.io/gorm"
 	"net/http"
 	"strings"
@@ -63,9 +63,16 @@ func (ctl *Controller) SetupSystem(c echo.Context) error {
 		IsAdmin:  true,
 	}
 
+	inactiveDays := data.KeepInactiveUserDays
+	if inactiveDays < 1 {
+		inactiveDays = 1
+	}
+
 	system := &models.System{
-		GoogleCaptchaSiteKey:   data.GoogleCaptchaSiteKey,
-		GoogleCaptchaSecretKey: data.GoogleCaptchaSecretKey,
+		GoogleCaptchaSiteKey:    data.GoogleCaptchaSiteKey,
+		GoogleCaptchaSecretKey:  data.GoogleCaptchaSecretKey,
+		AutoDeleteInactiveUsers: data.AutoDeleteInactiveUsers,
+		KeepInactiveUserDays:    inactiveDays,
 	}
 	newUser, newSystem, err := ctl.systemRepo.SystemSetup(c.Request().Context(), user, system)
 	if err != nil {
@@ -129,8 +136,10 @@ func (ctl *Controller) System(c echo.Context) error {
 		return ctl.request.BadRequest(c, err)
 	}
 	return c.JSON(http.StatusOK, GetSystemResponse{
-		GoogleCaptchaSiteKey:   config.GoogleCaptchaSiteKey,
-		GoogleCaptchaSecretKey: config.GoogleCaptchaSecretKey,
+		GoogleCaptchaSiteKey:    config.GoogleCaptchaSiteKey,
+		GoogleCaptchaSecretKey:  config.GoogleCaptchaSecretKey,
+		AutoDeleteInactiveUsers: config.AutoDeleteInactiveUsers,
+		KeepInactiveUserDays:    config.KeepInactiveUserDays,
 	})
 }
 
@@ -147,7 +156,7 @@ func (ctl *Controller) System(c echo.Context) error {
 // @Success      200  {object}  GetSystemResponse
 // @Router       /system [patch]
 func (ctl *Controller) SystemUpdate(c echo.Context) error {
-	userUID := c.Param("userUID")
+	userUID, _ := c.Get("userUID").(string) // from AuthMiddleware
 
 	var data PatchSystemUpdateData
 	if err := ctl.request.DoValidate(c, &data); err != nil {
@@ -162,6 +171,16 @@ func (ctl *Controller) SystemUpdate(c echo.Context) error {
 	if data.GoogleCaptchaSecretKey != nil {
 		system.GoogleCaptchaSecretKey = *data.GoogleCaptchaSecretKey
 	}
+	if data.AutoDeleteInactiveUsers != nil {
+		system.AutoDeleteInactiveUsers = *data.AutoDeleteInactiveUsers
+	}
+	if data.KeepInactiveUserDays != nil {
+		inactiveDays := *data.KeepInactiveUserDays
+		if inactiveDays < 1 {
+			inactiveDays = 1
+		}
+		system.KeepInactiveUserDays = inactiveDays
+	}
 
 	ctx := context.WithValue(c.Request().Context(), "userUID", userUID)
 	updatedConfig, err := ctl.systemRepo.SystemUpdate(ctx, &system)
@@ -170,8 +189,10 @@ func (ctl *Controller) SystemUpdate(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, GetSystemResponse{
-		GoogleCaptchaSiteKey:   updatedConfig.GoogleCaptchaSiteKey,
-		GoogleCaptchaSecretKey: updatedConfig.GoogleCaptchaSecretKey,
+		GoogleCaptchaSiteKey:    updatedConfig.GoogleCaptchaSiteKey,
+		GoogleCaptchaSecretKey:  updatedConfig.GoogleCaptchaSecretKey,
+		AutoDeleteInactiveUsers: updatedConfig.AutoDeleteInactiveUsers,
+		KeepInactiveUserDays:    updatedConfig.KeepInactiveUserDays,
 	})
 }
 
@@ -220,7 +241,7 @@ func (ctl *Controller) Login(c echo.Context) error {
 	}
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.WithValue(c.Request().Context(), "userUID", user.UID), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), "userUID", user.UID), 10*time.Second)
 		ctx = context.WithValue(ctx, "username", user.Username)
 		defer cancel()
 
@@ -250,7 +271,7 @@ func (ctl *Controller) Login(c echo.Context) error {
 // @Success      201  {object}  models.User
 // @Router       /system/users [post]
 func (ctl *Controller) CreateUser(c echo.Context) error {
-	//userUID := c.Param("userUID")
+	//userUID, _ := c.Get("userUID").(string) // from AuthMiddleware
 
 	var data CreateUserData
 	if err := ctl.request.DoValidate(c, &data); err != nil {
@@ -325,7 +346,7 @@ func (ctl *Controller) Users(c echo.Context) error {
 // @Router       /system/users/{uid}/password [post]
 func (ctl *Controller) ChangeUserPasswordByAdmin(c echo.Context) error {
 	userTargetID := c.Param("uid")
-	userUID := c.Param("userUID")
+	userUID, _ := c.Get("userUID").(string) // from AuthMiddleware
 
 	var data ChangeUserPassword
 	if err := ctl.request.DoValidate(c, &data); err != nil {
@@ -358,7 +379,7 @@ func (ctl *Controller) ChangeUserPasswordByAdmin(c echo.Context) error {
 // @Router       /system/users/{uid} [delete]
 func (ctl *Controller) DeleteUser(c echo.Context) error {
 	deleteUserID := c.Param("uid")
-	userUID := c.Param("userUID")
+	userUID, _ := c.Get("userUID").(string) // from AuthMiddleware
 
 	ctx := context.WithValue(c.Request().Context(), "userUID", userUID)
 	err := ctl.userRepo.DeleteUser(ctx, deleteUserID)

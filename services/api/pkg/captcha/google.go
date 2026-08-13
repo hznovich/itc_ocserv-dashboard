@@ -2,7 +2,7 @@ package captcha
 
 import (
 	"encoding/json"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/logger"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/logger"
 	"io"
 	"net/http"
 	"net/url"

@@ -1,8 +1,8 @@
-module github.com/mmtaee/ocserv-users-management/webhook
+module github.com/mmtaee/ocserv-dashboard/webhook
 
 go 1.25.0
 
-require github.com/mmtaee/ocserv-users-management/common v0.0.0-00010101000000-000000000000
+require github.com/mmtaee/ocserv-dashboard/common v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
@@ -12,4 +12,4 @@ require (
 	gorm.io/gorm v1.30.1 // indirect
 )
 
-replace github.com/mmtaee/ocserv-users-management/common => ./../common
+replace github.com/mmtaee/ocserv-dashboard/common => ./../common

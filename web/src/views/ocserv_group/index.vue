@@ -90,7 +90,7 @@ const updateMeta = (newMeta: Meta) => {
                         class="me-lg-5"
                         color="grey"
                         size="small"
-                        variant="flat"
+                        variant="outlined"
                         @click="router.push({ name: 'Ocserv Group Create' })"
                     >
                         {{ t('CREATE') }}
@@ -153,7 +153,9 @@ const updateMeta = (newMeta: Meta) => {
                     </tbody>
                 </v-table>
 
-                <div v-if="loading || groups.length == 0" class="ms-md-5 mb-md-5 text-capitalize">{{ t('NO_GROUP_FOUND_TABLE') }}</div>
+                <div v-if="loading || groups.length == 0" class="ms-md-5 mb-md-5 text-capitalize">
+                    {{ t('NO_GROUP_FOUND_TABLE') }}
+                </div>
 
                 <Pagination @update="updateMeta" :totalRecords="meta.total_records" />
             </UiParentCard>

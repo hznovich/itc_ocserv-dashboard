@@ -15,6 +15,255 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/backup/ocserv_groups": {
+            "get": {
+                "description": "Download gzip compressed JSON backup of all ocserv groups including default group configuration",
+                "produces": [
+                    "application/json",
+                    "application/gzip"
+                ],
+                "tags": [
+                    "System(Backup)"
+                ],
+                "summary": "Backup ocserv groups",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer TOKEN",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ocserv_groups_backup.json.gz",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/request.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.Unauthorized"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.PermissionDenied"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Upload JSON or gzip-compressed (.json.gz) backup of ocserv groups",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System(Restore)"
+                ],
+                "summary": "Restore ocserv groups",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer TOKEN",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "JSON or JSON.GZ file",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/backup.RestoreResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/request.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.Unauthorized"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.PermissionDenied"
+                        }
+                    }
+                }
+            }
+        },
+        "/backup/ocserv_users": {
+            "get": {
+                "description": "Download gzip compressed JSON backup of all ocserv users",
+                "produces": [
+                    "application/json",
+                    "application/gzip"
+                ],
+                "tags": [
+                    "System(Backup)"
+                ],
+                "summary": "Backup ocserv users",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer TOKEN",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ocserv_users_backup.json.gz",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/request.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.Unauthorized"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.PermissionDenied"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Upload JSON or gzip-compressed (.json.gz) backup of ocserv users",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System(Restore)"
+                ],
+                "summary": "Restore ocserv users",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer TOKEN",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "JSON or JSON.GZ file",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/backup.RestoreResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/request.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.Unauthorized"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.PermissionDenied"
+                        }
+                    }
+                }
+            }
+        },
+        "/customers/disconnect_sessions": {
+            "post": {
+                "description": "disconnects all online sessions for a customer",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Customers"
+                ],
+                "summary": "Disconnect all online sessions of a customer",
+                "parameters": [
+                    {
+                        "description": "customer username and password (same ocserv account).",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/customer.SummaryData"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/request.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.TooManyRequests"
+                        }
+                    }
+                }
+            }
+        },
         "/customers/summary": {
             "post": {
                 "description": "Customer summary account",
@@ -768,6 +1017,18 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "enum": [
+                            "online",
+                            "active",
+                            "deactivated",
+                            "locked"
+                        ],
+                        "type": "string",
+                        "description": "filter ocserv user by statues",
+                        "name": "filter",
+                        "in": "query"
+                    },
+                    {
                         "type": "string",
                         "description": "Bearer TOKEN",
                         "name": "Authorization",
@@ -962,125 +1223,6 @@ const docTemplate = `{
                             "items": {
                                 "type": "string"
                             }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/request.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/middlewares.Unauthorized"
-                        }
-                    }
-                }
-            }
-        },
-        "/ocserv/users/statistics": {
-            "get": {
-                "description": "Ocserv Users Statistics",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Ocserv(Statistics)"
-                ],
-                "summary": "Ocserv Users Statistics",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer TOKEN",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "date_start",
-                        "name": "date_start",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "date_end",
-                        "name": "date_end",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.DailyTraffic"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/request.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/middlewares.Unauthorized"
-                        }
-                    }
-                }
-            }
-        },
-        "/ocserv/users/total-bandwidth": {
-            "get": {
-                "description": "Ocserv Users TotalBandwidth calculating",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Ocserv(Bandwidth)"
-                ],
-                "summary": "Ocserv Users TotalBandwidth calculating",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer TOKEN",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "date_start",
-                        "name": "date_start",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "date_end",
-                        "name": "date_end",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/repository.TotalBandwidths"
                         }
                     },
                     "400": {
@@ -1358,6 +1500,100 @@ const docTemplate = `{
                 }
             }
         },
+        "/ocserv/users/{uid}/session_logs": {
+            "get": {
+                "description": "Ocserv User session logs",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ocserv(Users)"
+                ],
+                "summary": "Ocserv User session logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer TOKEN",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Page number, starting from 1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Number of items per page",
+                        "name": "size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Field to order by",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "ASC",
+                            "DESC"
+                        ],
+                        "type": "string",
+                        "description": "Sort order, either ASC or DESC",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Ocserv User UID",
+                        "name": "uid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "date_start",
+                        "name": "date_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "date_end",
+                        "name": "date_end",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ocserv_user.SessionLogsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/request.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.Unauthorized"
+                        }
+                    }
+                }
+            }
+        },
         "/ocserv/users/{uid}/statistics": {
             "get": {
                 "description": "Ocserv User Statistics",
@@ -1501,6 +1737,256 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/request.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.Unauthorized"
+                        }
+                    }
+                }
+            }
+        },
+        "/reports/session_logs": {
+            "get": {
+                "description": "Ocserv session logs",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Report"
+                ],
+                "summary": "Ocserv session logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer TOKEN",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Page number, starting from 1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Number of items per page",
+                        "name": "size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Field to order by",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "ASC",
+                            "DESC"
+                        ],
+                        "type": "string",
+                        "description": "Sort order, either ASC or DESC",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "date_start",
+                        "name": "date_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "date_end",
+                        "name": "date_end",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/report.SessionLogsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/request.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.Unauthorized"
+                        }
+                    }
+                }
+            }
+        },
+        "/reports/statistics": {
+            "get": {
+                "description": "Ocserv Users Statistics",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Report"
+                ],
+                "summary": "Ocserv Users Statistics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer TOKEN",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "date_start",
+                        "name": "date_start",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "date_end",
+                        "name": "date_end",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.DailyTraffic"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/request.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.Unauthorized"
+                        }
+                    }
+                }
+            }
+        },
+        "/reports/total-bandwidth": {
+            "get": {
+                "description": "Ocserv Users TotalBandwidth calculating",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Report"
+                ],
+                "summary": "Ocserv Users TotalBandwidth calculating",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer TOKEN",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "date_start",
+                        "name": "date_start",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "date_end",
+                        "name": "date_end",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/repository.TotalBandwidths"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/request.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/middlewares.Unauthorized"
+                        }
+                    }
+                }
+            }
+        },
+        "/reports/users": {
+            "get": {
+                "description": "Result of all user reports",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Report"
+                ],
+                "summary": "Result of all user reports",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer TOKEN",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/report.OcservUserReportResponse"
+                        }
                     },
                     "400": {
                         "description": "Bad Request",
@@ -2131,6 +2617,23 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "backup.RestoreResponse": {
+            "type": "object",
+            "properties": {
+                "existing": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "inserted": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "customer.ModelCustomer": {
             "type": "object",
             "required": [
@@ -2785,6 +3288,38 @@ const docTemplate = `{
                 }
             }
         },
+        "models.OcservUserSessionLog": {
+            "type": "object",
+            "required": [
+                "created_at",
+                "event",
+                "message",
+                "username"
+            ],
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "event": {
+                    "type": "string",
+                    "enum": [
+                        "user-agent",
+                        "handshake",
+                        "periodic-stats",
+                        "disconnect"
+                    ]
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "models.OnlineUserSession": {
             "type": "object",
             "properties": {
@@ -2822,11 +3357,17 @@ const docTemplate = `{
                 "_": {
                     "type": "integer"
                 },
+                "auto_delete_inactive_users": {
+                    "type": "boolean"
+                },
                 "google_captcha_secret": {
                     "type": "string"
                 },
                 "google_captcha_site_key": {
                     "type": "string"
+                },
+                "keep_inactive_user_days": {
+                    "type": "integer"
                 }
             }
         },
@@ -2987,6 +3528,11 @@ const docTemplate = `{
                     ],
                     "example": "MonthlyTransmit"
                 },
+                "unlimited": {
+                    "type": "boolean",
+                    "default": false,
+                    "example": false
+                },
                 "username": {
                     "type": "string",
                     "maxLength": 32,
@@ -3024,6 +3570,23 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/user.Ocpasswd"
+                    }
+                }
+            }
+        },
+        "ocserv_user.SessionLogsResponse": {
+            "type": "object",
+            "required": [
+                "meta"
+            ],
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/request.Meta"
+                },
+                "result": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.OcservUserSessionLog"
                     }
                 }
             }
@@ -3129,6 +3692,45 @@ const docTemplate = `{
                         "TotallyReceive"
                     ],
                     "example": "MonthlyTransmit"
+                },
+                "unlimited": {
+                    "type": "boolean",
+                    "default": false,
+                    "example": false
+                }
+            }
+        },
+        "report.OcservUserReportResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "integer"
+                },
+                "deactivated": {
+                    "type": "integer"
+                },
+                "locked": {
+                    "type": "integer"
+                },
+                "online": {
+                    "type": "integer"
+                }
+            }
+        },
+        "report.SessionLogsResponse": {
+            "type": "object",
+            "required": [
+                "meta"
+            ],
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/request.Meta"
+                },
+                "result": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.OcservUserSessionLog"
+                    }
                 }
             }
         },
@@ -3211,7 +3813,9 @@ const docTemplate = `{
             ],
             "properties": {
                 "password": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 16,
+                    "minLength": 4
                 }
             }
         },
@@ -3223,10 +3827,14 @@ const docTemplate = `{
             ],
             "properties": {
                 "new_password": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 16,
+                    "minLength": 4
                 },
                 "old_password": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 16,
+                    "minLength": 4
                 }
             }
         },
@@ -3238,7 +3846,9 @@ const docTemplate = `{
             ],
             "properties": {
                 "password": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 16,
+                    "minLength": 4
                 },
                 "username": {
                     "type": "string"
@@ -3256,11 +3866,17 @@ const docTemplate = `{
         "system.GetSystemResponse": {
             "type": "object",
             "properties": {
+                "auto_delete_inactive_users": {
+                    "type": "boolean"
+                },
                 "google_captcha_secret_key": {
                     "type": "string"
                 },
                 "google_captcha_site_key": {
                     "type": "string"
+                },
+                "keep_inactive_user_days": {
+                    "type": "integer"
                 }
             }
         },
@@ -3294,15 +3910,23 @@ const docTemplate = `{
         "system.PatchSystemUpdateData": {
             "type": "object",
             "required": [
+                "auto_delete_inactive_users",
                 "google_captcha_secret_key",
-                "google_captcha_site_key"
+                "google_captcha_site_key",
+                "keep_inactive_user_days"
             ],
             "properties": {
+                "auto_delete_inactive_users": {
+                    "type": "boolean"
+                },
                 "google_captcha_secret_key": {
                     "type": "string"
                 },
                 "google_captcha_site_key": {
                     "type": "string"
+                },
+                "keep_inactive_user_days": {
+                    "type": "integer"
                 }
             }
         },
@@ -3313,11 +3937,17 @@ const docTemplate = `{
                 "username"
             ],
             "properties": {
+                "auto_delete_inactive_users": {
+                    "type": "boolean"
+                },
                 "google_captcha_secret_key": {
                     "type": "string"
                 },
                 "google_captcha_site_key": {
                     "type": "string"
+                },
+                "keep_inactive_user_days": {
+                    "type": "integer"
                 },
                 "password": {
                     "type": "string",

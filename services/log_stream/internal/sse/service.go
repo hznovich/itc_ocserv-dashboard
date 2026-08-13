@@ -2,7 +2,7 @@ package sse
 
 import (
 	"fmt"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/logger"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/logger"
 	"net/http"
 	"sync"
 	"time"

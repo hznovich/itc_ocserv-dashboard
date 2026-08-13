@@ -1,0 +1,40 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+*.db
+*.sqlite
+
+.env
+.env.*.bak
+volumes
+.volumes
+note
+
+# Runtime data created by docker-compose (postgres cluster, logs, ocserv
+# state, issued certificates). Never commit this — it contains the database
+# and private keys.
+data/
+
+db/

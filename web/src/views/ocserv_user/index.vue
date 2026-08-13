@@ -3,7 +3,13 @@ import { router } from '@/router';
 import UiParentCard from '@/components/shared/UiParentCard.vue';
 import { useI18n } from 'vue-i18n';
 import { onMounted, reactive, ref } from 'vue';
-import { type ModelsOcservUser, ModelsOcservUserTrafficTypeEnum, OcservUsersApi } from '@/api';
+import {
+    type ModelsOcservUser,
+    ModelsOcservUserTrafficTypeEnum,
+    OcservUsersApi,
+    type OcservUsersGetFilterEnum,
+    ReportApi, type ReportOcservUserReportResponse
+} from '@/api';
 import { getAuthorization } from '@/utils/request';
 import { bytesToGB, formatDate, trafficTypesTransformer } from '@/utils/convertors';
 import DeleteDialog from '@/components/ocserv_user/DeleteDialog.vue';
@@ -11,11 +17,12 @@ import Pagination from '@/components/shared/Pagination.vue';
 import type { Meta } from '@/types/metaTypes/MetaType';
 import { useSnackbarStore } from '@/stores/snackbar';
 import { useProfileStore } from '@/stores/profile';
-import ActivateDialog from '@/components/ocserv_user/ActivateDialog.vue';
+import SessionLogsDialog from '@/components/ocserv_user/SessionLogsDialog.vue';
+import StatisticsDialog from '@/components/ocserv_user/StatisticsDialog.vue';
 
 const { t } = useI18n();
 const loading = ref(false);
-const q = ref("")
+const q = ref('');
 const api = new OcservUsersApi();
 const meta = reactive<Meta>({
     page: 1,
@@ -32,11 +39,28 @@ const activateDialog = ref(false);
 const activateUserName = ref('');
 const activateUserUID = ref('');
 
+const statisticsDialog = ref(false);
+const statisticsUsername = ref('');
+const statisticsUID = ref('');
+
+const sessionLogsDialog = ref(false);
+const sessionLogsUsername = ref('');
+const sessionLogsUID = ref('');
+
 const users = ref<ModelsOcservUser[]>([]);
 const snackbar = useSnackbarStore();
 
 const profileStore = useProfileStore();
 const isAdmin = ref(profileStore.isAdmin);
+
+const userStats = ref<ReportOcservUserReportResponse>({
+    active: 0,
+    deactivated: 0,
+    online: 0,
+    locked: 0
+});
+
+const filter = ref<OcservUsersGetFilterEnum>();
 
 const getUsers = () => {
     loading.value = true;
@@ -44,6 +68,7 @@ const getUsers = () => {
         ...getAuthorization(),
         ...meta,
         q: q.value,
+        filter: filter.value
     })
         .then((res) => {
             users.value = res.data.result ?? [];
@@ -93,6 +118,7 @@ const lock = (uid: string) => {
             if (index > -1) {
                 users.value[index].is_locked = true;
             }
+            getUserStats();
         })
         .finally(() => {
             snackbar.show({
@@ -114,6 +140,7 @@ const unlock = (uid: string) => {
             if (index > -1) {
                 users.value[index].is_locked = false;
             }
+            getUserStats();
         })
         .finally(() => {
             snackbar.show({
@@ -142,6 +169,7 @@ const activateUser = (expireAt: string) => {
                 users.value[index].expire_at = expireAt;
                 users.value[index].is_online = false;
             }
+            getUserStats();
         })
         .finally(() => {
             cancelActivateUser();
@@ -155,7 +183,15 @@ const activateUser = (expireAt: string) => {
 };
 
 const statistics = async (uid: string, username: string) => {
-    await router.push({ name: 'Ocserv User Statistics', params: { uid: uid }, query: { username: username } });
+    statisticsDialog.value = true;
+    statisticsUsername.value = username;
+    statisticsUID.value = uid;
+};
+
+const sessionLogs = async (uid: string, username: string) => {
+    sessionLogsDialog.value = true;
+    sessionLogsUsername.value = username;
+    sessionLogsUID.value = uid;
 };
 
 const deleteUserHandler = (uid: string, username: string) => {
@@ -182,6 +218,18 @@ const cancelActivateUser = () => {
     activateDialog.value = false;
 };
 
+const closeStatisticsDialog = () => {
+    statisticsUID.value = '';
+    statisticsUsername.value = '';
+    statisticsDialog.value = false;
+};
+
+const closeSessionLogsDialog = () => {
+    sessionLogsUID.value = '';
+    sessionLogsUsername.value = '';
+    sessionLogsDialog.value = false;
+};
+
 const deleteUser = () => {
     api.ocservUsersUidDelete({
         ...getAuthorization(),
@@ -189,6 +237,7 @@ const deleteUser = () => {
     })
         .then((_) => {
             getUsers();
+            getUserStats();
         })
         .finally(() => {
             cancelDeleteUser();
@@ -200,15 +249,38 @@ const updateMeta = (newMeta: Meta) => {
     getUsers();
 };
 
-const search = (clear: boolean = false)=>{
+const search = (clear: boolean = false) => {
     if (clear) {
-        q.value = ""
+        q.value = '';
     }
-    if (q.value.length > 1 || clear) {
-        getUsers()
-    }
-}
 
+    if (q.value.length > 1 || clear || filter.value) {
+        if (q.value.length < 2) {
+            q.value = '';
+        }
+        getUsers();
+    }
+};
+
+const reload = () => {
+    q.value = '';
+    filter.value = undefined;
+    getUsers();
+};
+
+const getUserStats = () => {
+    const apiStats = new ReportApi()
+    apiStats.reportsUsersGet({
+        ...getAuthorization()
+    }).then((res) => {
+        console.log(res.data);
+        Object.assign(userStats.value, res.data);
+    });
+};
+
+onMounted(() => {
+    getUserStats();
+});
 </script>
 
 <template>
@@ -220,43 +292,112 @@ const search = (clear: boolean = false)=>{
                         class="me-lg-5"
                         color="grey"
                         size="small"
-                        variant="flat"
+                        variant="outlined"
                         @click="router.push({ name: 'Ocserv User Create' })"
                     >
                         {{ t('CREATE') }}
                     </v-btn>
                 </template>
 
+                <div class="mx-15 mb-5">
+                    <v-row align="center" justify="center">
+                        <v-col cols="12" lg="2" sm="6">
+                            <v-card class="text-center" elevation="10">
+                                <v-card-title class="text-subtitle-1 mt-2 text-capitalize">
+                                    {{ t('ONLINE') }} {{ t('USERS') }}
+                                </v-card-title>
+
+                                <v-card-text class="text-muted text-h5">
+                                    {{ userStats.online || 0 }}
+                                </v-card-text>
+                            </v-card>
+                        </v-col>
+
+                        <v-col cols="12" lg="2" sm="6">
+                            <v-card class="text-center" elevation="10">
+                                <v-card-title class="text-subtitle-1 mt-2 text-capitalize">
+                                    {{ t('ACTIVE') }} {{ t('USERS') }}
+                                </v-card-title>
+
+                                <v-card-text class="text-muted text-h5">
+                                    {{ userStats.active || 0 }}
+                                </v-card-text>
+                            </v-card>
+                        </v-col>
+
+                        <v-col cols="12" lg="2" sm="6">
+                            <v-card class="text-center" elevation="10">
+                                <v-card-title class="text-subtitle-1 mt-2 text-capitalize">
+                                    {{ t('DEACTIVATED') }} {{ t('USERS') }}
+                                </v-card-title>
+
+                                <v-card-text class="text-muted text-h5">
+                                    {{ userStats.deactivated }}
+                                </v-card-text>
+                            </v-card>
+                        </v-col>
+
+                        <v-col cols="12" lg="2" sm="6">
+                            <v-card class="text-center" elevation="10">
+                                <v-card-title class="text-subtitle-1 mt-2 text-capitalize">
+                                    {{ t('LOCKED') }} {{ t('USERS') }}
+                                </v-card-title>
+
+                                <v-card-text class="text-muted text-h5">
+                                    {{ userStats.locked }}
+                                </v-card-text>
+                            </v-card>
+                        </v-col>
+                    </v-row>
+                </div>
+
                 <v-progress-linear :active="loading" indeterminate></v-progress-linear>
 
                 <div v-if="!loading">
-                    <v-row align="center" justify="start" class="px-md-15 mb-3">
-                        <v-col cols="12" md="3" sm="5">
-                            <v-text-field
-                                :label="t('USERNAME')"
-                                v-model="q"
-                                color="primary"
-                                hide-details
-                                variant="outlined"
-                                clearable
-                                @click:clear="search(true)"
-                                @keyup.enter.native="search(false)"
-                                density="compact"
-                            />
-                        </v-col>
-                        <v-col cols="auto">
-                            <v-btn @click="search(false)" color="info" size="small">
-                                <v-icon start>mdi-magnify</v-icon>
-                                {{ t("SEARCH") }}
-                            </v-btn>
-                        </v-col>
-                    </v-row>
+                    <div class="mb-3">
+                        <v-row align="center" class="px-md-15 mb-3 text-capitalize" justify="start">
+                            <v-col cols="12" md="3" sm="5">
+                                <v-text-field
+                                    v-model="q"
+                                    :label="t('USERNAME')"
+                                    clearable
+                                    color="primary"
+                                    density="compact"
+                                    hide-details
+                                    variant="outlined"
+                                    @click:clear="search(true)"
+                                    @keyup.enter.native="search(false)"
+                                />
+                            </v-col>
 
-                    <v-table class="px-md-15" v-if="users.length > 0">
+                            <v-col cols="12" md="auto" sm="5" class="ma-0 pa-0 mt-5 me-5">
+                                <v-radio-group inline v-model="filter">
+                                    <v-radio value="active" :label="t('ACTIVE')" hide-details />
+                                    <v-radio value="online" :label="t('ONLINE')" hide-details />
+                                    <v-radio value="deactivated" :label="t('DEACTIVATED')" hide-details />
+                                    <v-radio value="locked" :label="t('LOCKED')" hide-details />
+                                </v-radio-group>
+                            </v-col>
+
+                            <v-col class="ma-0 pa-0" cols="12" md="auto">
+                                <v-btn color="info" size="small" @click="search(false)">
+                                    <v-icon start>mdi-magnify</v-icon>
+                                    {{ t('SEARCH') }}
+                                </v-btn>
+                            </v-col>
+
+                            <v-col cols="12" md="auto">
+                                <v-btn color="secondary" size="small" variant="outlined" @click="reload">
+                                    {{ t('RELOAD') }}
+                                </v-btn>
+                            </v-col>
+                        </v-row>
+                    </div>
+                    <v-table v-if="users.length > 0" class="px-md-15">
                         <thead>
                             <tr class="text-capitalize bg-lightprimary">
                                 <th class="text-left">{{ t('USERNAME') }}</th>
-                                <th class="text-left" v-if="isAdmin">{{ t('OWNER') }}</th>
+                                <th v-if="isAdmin" class="text-left">{{ t('OWNER') }}</th>
                                 <th class="text-left">{{ t('GROUP') }}</th>
                                 <th class="text-left">{{ t('TRAFFIC') }}</th>
                                 <th class="text-left">{{ t('BANDWIDTHS') }}</th>
@@ -303,7 +444,7 @@ const search = (clear: boolean = false)=>{
                                         <br />
                                         <v-tooltip :text="`${item.rx.toLocaleString()} bytes`">
                                             <template #activator="{ props }">
-                                                <span v-bind="props" class="text-info">
+                                                <span class="text-info" v-bind="props">
                                                     {{ bytesToGB(item.rx, 6) }} GB
                                                 </span>
                                             </template>
@@ -320,7 +461,7 @@ const search = (clear: boolean = false)=>{
                                         <br />
                                         <v-tooltip :text="`${item.tx.toLocaleString()} bytes`">
                                             <template #activator="{ props }">
-                                                <span v-bind="props" class="text-info">
+                                                <span class="text-info" v-bind="props">
                                                     {{ bytesToGB(item.tx, 4) }} GB
                                                 </span>
                                             </template>
@@ -331,7 +472,7 @@ const search = (clear: boolean = false)=>{
                                     <div>
                                         {{ t('EXPIRE_AT') }}:<br />
                                         <span class="text-info text-capitalize">
-                                            {{ formatDate(item.expire_at) }}
+                                            {{ formatDate(item.expire_at) || t('UNLIMITED') }}
                                         </span>
                                     </div>
                                     <div v-if="item.deactivated_at">
@@ -386,8 +527,8 @@ const search = (clear: boolean = false)=>{
                                             </v-list-item>
 
                                             <v-list-item
-                                                @click="editUser(item?.uid)"
                                                 v-if="!(item.is_locked && item.deactivated_at)"
+                                                @click="editUser(item?.uid)"
                                             >
                                                 <v-list-item-title class="text-info text-capitalize me-5">
                                                     {{ t('UPDATE') }}
@@ -454,6 +595,15 @@ const search = (clear: boolean = false)=>{
                                                 </template>
                                             </v-list-item>
 
+                                            <v-list-item @click="sessionLogs(item.uid, item.username)">
+                                                <v-list-item-title class="text-grey text-capitalize me-5">
+                                                    {{ t('SESSION_LOGS') }}
+                                                </v-list-item-title>
+                                                <template v-slot:prepend>
+                                                    <v-icon class="ms-2" color="grey">mdi-timeline-text-outline</v-icon>
+                                                </template>
+                                            </v-list-item>
+
                                             <v-list-item @click="deleteUserHandler(item?.uid, item.username)">
                                                 <v-list-item-title class="text-error text-capitalize me-5">
                                                     {{ t('DELETE') }}
@@ -474,7 +624,7 @@ const search = (clear: boolean = false)=>{
                     {{ t('NO_USER_FOUND_TABLE') }}
                 </div>
 
-                <Pagination @update="updateMeta" :totalRecords="meta.total_records" />
+                <Pagination :totalRecords="meta.total_records" @update="updateMeta" />
             </UiParentCard>
         </v-col>
     </v-row>
@@ -485,7 +635,22 @@ const search = (clear: boolean = false)=>{
         @close="cancelActivateUser"
         @activateUser="activateUser"
     />
+
     <DeleteDialog :show="deleteDialog" :username="deleteUserName" @close="cancelDeleteUser" @deleteUser="deleteUser" />
+
+    <StatisticsDialog
+        :show="statisticsDialog"
+        :username="statisticsUsername"
+        :uid="statisticsUID"
+        @close="closeStatisticsDialog"
+    />
+
+    <SessionLogsDialog
+        :show="sessionLogsDialog"
+        :username="sessionLogsUsername"
+        :uid="sessionLogsUID"
+        @close="closeSessionLogsDialog"
+    />
 </template>
 
 <style scoped>
@@ -497,9 +662,11 @@ tbody tr:nth-child(even) td {
     tbody tr:nth-child(even) td {
         background-color: #f5f5f5;
     }
+
     tbody tr:nth-child(even) td:first-child {
         border-radius: 8px 0 0 8px;
     }
+
     tbody tr:nth-child(even) td:last-child {
         border-radius: 0 8px 8px 0;
     }

@@ -2,14 +2,14 @@ package crypto
 
 import (
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/config"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/config"
 	"github.com/oklog/ulid/v2"
 	"time"
 )
 
 func GenerateAccessToken(userID, username string, expire int64, isAdmin bool) (string, error) {
 	cfg := config.Get()
-	
+
 	claims := jwt.MapClaims{
 		"sub":      userID,
 		"jti":      ulid.Make().String(),

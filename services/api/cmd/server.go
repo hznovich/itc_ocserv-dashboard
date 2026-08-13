@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"github.com/joho/godotenv"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/bootstrap"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/bootstrap"
 	"github.com/spf13/cobra"
 	"log"
 )

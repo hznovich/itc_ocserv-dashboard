@@ -1,0 +1,90 @@
+# =============================================================================
+# Rendered from nginx.conf.tmpl by entrypoint.sh on every container start.
+# Variables substituted: NGINX_SERVER_CERT, NGINX_SERVER_KEY, API_PORT,
+# LOG_STREAM_PORT, NGINX_HTTP_PORT, NGINX_HTTPS_PORT.
+# =============================================================================
+
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /var/log/nginx/error.log warn;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+    sendfile      on;
+    keepalive_timeout 65;
+    server_tokens off;
+
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" "$http_user_agent"';
+    access_log /var/log/nginx/access.log main;
+
+    # Internal upstreams — both run on 127.0.0.1 inside the container.
+    upstream api_backend         { server 127.0.0.1:${API_PORT}; }
+    upstream log_stream_backend  { server 127.0.0.1:${LOG_STREAM_PORT}; }
+
+    # NOTE: there is deliberately no `listen 80;` server here.
+    #
+    # With network_mode: host, binding :80 would collide with whatever else
+    # owns port 80 on this machine (HAProxy, another nginx, ...) and nginx
+    # would refuse to start ENTIRELY — taking the dashboard down with it.
+    #
+    # ACME HTTP-01 challenges are served by certbot itself in --standalone
+    # mode, which binds CERTBOT_HTTP_PORT only for the few seconds an
+    # issuance or renewal takes. Point your reverse proxy's
+    # /.well-known/acme-challenge/ route at that port.
+
+    # HTTP -> HTTPS redirect for the dashboard.
+    server {
+        listen ${NGINX_HTTP_PORT};
+        server_name _;
+        return 301 https://$host:${NGINX_HTTPS_PORT}$request_uri;
+    }
+
+    # Dashboard HTTPS listener.
+    server {
+        listen ${NGINX_HTTPS_PORT} ssl;
+        http2 on;
+        server_name _;
+
+        ssl_certificate     ${NGINX_SERVER_CERT};
+        ssl_certificate_key ${NGINX_SERVER_KEY};
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers on;
+
+        location / {
+            root /var/www/site;
+            index index.html;
+            try_files $uri $uri/ /index.html;
+        }
+
+        location ~ ^/api {
+            proxy_pass http://api_backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 60s;
+        }
+
+        location /ws/ {
+            proxy_pass http://log_stream_backend/;
+            proxy_http_version 1.1;
+            proxy_set_header Connection '';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 86400s;
+            proxy_send_timeout 86400s;
+        }
+    }
+}

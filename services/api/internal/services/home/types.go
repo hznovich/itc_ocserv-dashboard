@@ -1,8 +1,8 @@
 package home
 
 import (
-	"github.com/mmtaee/ocserv-users-management/api/internal/repository"
-	"github.com/mmtaee/ocserv-users-management/common/models"
+	"github.com/mmtaee/ocserv-dashboard/api/internal/repository"
+	"github.com/mmtaee/ocserv-dashboard/common/models"
 )
 
 type GeneralInfo struct {

@@ -1,6 +1,6 @@
 package group
 
-import "github.com/mmtaee/ocserv-users-management/common/models"
+import "github.com/mmtaee/ocserv-dashboard/common/models"
 
 type UnsyncedGroup struct {
 	Name   string                    `json:"name" validate:"required"`

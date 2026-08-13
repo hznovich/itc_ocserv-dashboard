@@ -1,0 +1,65 @@
+services:
+  ocserv:
+    build: .
+    image: itc_ocserv:latest
+    container_name: ocserv
+    # Marker label for an optional host-side certbot post-renewal hook:
+    #   docker ps --filter label=certbot.restart=true --format '{{.ID}}' | xargs -r docker restart
+    labels:
+      - "certbot.restart=true"
+    restart: unless-stopped
+
+    # Host networking is REQUIRED for this image. The container shares the
+    # host's network stack, which:
+    #   - eliminates docker-proxy overhead and NAT quirks for VPN traffic;
+    #   - makes ocserv's UDP/TCP 443 trivially reachable;
+    #   - keeps masquerade/forwarding rules on the host where they belong.
+    #
+    # Side effects to be aware of:
+    #   - The container's iptables operations modify the HOST's iptables
+    #     (set SKIP_NAT=true in .env if you manage NAT externally).
+    #   - All listeners (3080, 3443, 443, 80 if certbot, plus internal
+    #     ports 18080/18081/18888/5432) bind directly on the host. If
+    #     anything else uses those ports, change the matching env var
+    #     (NGINX_HTTPS_PORT, API_PORT, POSTGRES_PORT, ...) in .env.
+    #   - There is no `ports:` mapping with host networking — Docker
+    #     ignores it and warns. We omit it deliberately.
+    network_mode: host
+
+    cap_add:
+      - NET_ADMIN
+    # NOTE: no `sysctls:` block here on purpose.
+    # net.ipv4.ip_forward is a namespaced sysctl, and with network_mode: host
+    # the container shares the HOST's network namespace — so runc refuses it:
+    #   "sysctl net.ipv4.ip_forward not allowed in host network namespace"
+    # Enable forwarding on the host instead (see README / the command below):
+    #   echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-ocserv.conf
+    #   sysctl --system
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      # ocserv state (config snippets, ocpasswd, generated certs).
+      - ./data/ocserv:/etc/ocserv
+      # PostgreSQL data dir + any future on-disk artefacts.
+      - ./data/db:/app/db
+      # TLS certificates.
+      #
+      # Mounted READ-WRITE because CERTBOT_ENABLED=true — certbot runs inside
+      # the container and needs to create live/, archive/ and accounts/ here.
+      # Certificates land at /opt/certs/live/<SSL_CN>/{fullchain,privkey}.pem
+      # on the host, so other services on this box can read them too.
+      #
+      # If you switch to host-issued certs (CERTBOT_ENABLED=false), append
+      # ":ro" to this line — the container then only reads them.
+      - /opt/certs:/opt/certs
+      # Persistent logs (supervisor, nginx, ocserv, postgres).
+      - ./data/logs:/var/log
+    environment:
+      - TZ=${TZ:-Asia/Vladivostok}
+    env_file:
+      - .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,8 +1,8 @@
 package repository
 
 import (
-	"github.com/mmtaee/ocserv-users-management/common/models"
-	"github.com/mmtaee/ocserv-users-management/common/ocserv/occtl"
+	"github.com/mmtaee/ocserv-dashboard/common/models"
+	"github.com/mmtaee/ocserv-dashboard/common/ocserv/occtl"
 )
 
 type OcctlRepository struct {

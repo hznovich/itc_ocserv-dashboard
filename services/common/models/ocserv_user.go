@@ -59,16 +59,20 @@ type OcservUser struct {
 	Owner         string            `json:"owner" gorm:"type:varchar(16);default:''" validate:"required"`
 	Group         string            `json:"group" gorm:"type:varchar(16);default:'defaults'" validate:"required"`
 	Username      string            `json:"username" gorm:"type:varchar(16);not null;uniqueIndex" validate:"required"`
-	Password      string            `json:"password" gorm:"type:varchar(16);not null" validate:"required"`
+	// Password is the plaintext VPN password as required by ocserv's ocpasswd file.
+	// It is intentionally NEVER serialised to JSON: any leak via `GET /ocserv/users`
+	// would expose every VPN credential to any logged-in operator. Use a dedicated
+	// reveal endpoint guarded by AdminPermission if you ever need to read it back.
+	Password      string            `json:"-" gorm:"type:varchar(16);not null" validate:"required"`
 	IsLocked      bool              `json:"is_locked" gorm:"default(false)" validate:"required"`
 	CreatedAt     time.Time         `json:"created_at" gorm:"autoCreateTime" validate:"required"`
 	UpdatedAt     time.Time         `json:"updated_at" gorm:"autoUpdateTime" validate:"omitempty"`
 	ExpireAt      *time.Time        `json:"expire_at" gorm:"type:date" validate:"omitempty"`
 	DeactivatedAt *time.Time        `json:"deactivated_at" gorm:"type:date" validate:"omitempty"`
 	TrafficType   string            `json:"traffic_type" gorm:"type:varchar(32);not null;default:1" enums:"Free,MonthlyTransmit,MonthlyReceive,TotallyTransmit,TotallyReceive" validate:"required"`
-	TrafficSize   int               `json:"traffic_size" gorm:"not null" validate:"required"` // in GiB  >> x * 1024 ** 3
-	Rx            int               `json:"rx" gorm:"not null;default:0" validate:"required"` // Receive in bytes
-	Tx            int               `json:"tx" gorm:"not null;default:0" validate:"required"` // Transmit in bytes
+	TrafficSize   int64             `json:"traffic_size" gorm:"not null" validate:"required"` // in GiB  >> x * 1024 ** 3
+	Rx            int64             `json:"rx" gorm:"not null;default:0" validate:"required"` // Receive in bytes
+	Tx            int64             `json:"tx" gorm:"not null;default:0" validate:"required"` // Transmit in bytes
 	Description   string            `json:"description" gorm:"type:text" validate:"omitempty"`
 	IsOnline      bool              `json:"is_online" gorm:"-:migration;->" validate:"required"`
 	Config        *OcservUserConfig `json:"config" gorm:"type:text"`
@@ -78,8 +82,8 @@ type OcservUserTrafficStatistics struct {
 	ID        uint      `json:"-" gorm:"primaryKey;autoIncrement"`
 	OcUserID  uint      `json:"-" gorm:"index;constraint:OnDelete:CASCADE"`
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
-	Rx        int       `json:"rx" gorm:"default:0"` // in bytes
-	Tx        int       `json:"tx" gorm:"default:0"` // in bytes
+	Rx        int64     `json:"rx" gorm:"default:0"` // in bytes
+	Tx        int64     `json:"tx" gorm:"default:0"` // in bytes
 }
 
 type DailyTraffic struct {
@@ -88,24 +92,53 @@ type DailyTraffic struct {
 	Tx   float64 `json:"tx"`   // in GiB
 }
 
+const (
+	EventUseragent     = "user-agent"
+	EventHandshake     = "handshake"
+	EventPeriodicStats = "periodic-stats"
+	EventDisconnect    = "disconnect"
+)
+
+type OcservUserSessionLog struct {
+	ID        uint      `json:"-" gorm:"primaryKey;autoIncrement"`
+	Username  string    `json:"username" gorm:"type:varchar(64);index" validate:"required"`
+	IP        string    `json:"ip" gorm:"type:varchar(45)" validate:"omitempty"`
+	Event     string    `json:"event" gorm:"type:varchar(64)" enums:"user-agent,handshake,periodic-stats,disconnect" validate:"required"`
+	Message   string    `json:"message" gorm:"type:text" validate:"required"`
+	CreatedAt time.Time `json:"created_at" validate:"required"`
+}
+
 func (c *OcservUserConfig) Value() (driver.Value, error) {
 	return json.Marshal(&c)
 }
 
 func (c *OcservUserConfig) Scan(value interface{}) error {
-	bytes, ok := value.([]byte)
-	if !ok {
-		return fmt.Errorf("failed to convert value to []byte")
+	if value == nil {
+		return nil
 	}
-	return json.Unmarshal(bytes, c)
+
+	switch v := value.(type) {
+
+	case []byte:
+		return json.Unmarshal(v, c)
+
+	case string:
+		return json.Unmarshal([]byte(v), c)
+
+	default:
+		return fmt.Errorf("unsupported type for OcservUserConfig: %T", value)
+	}
 }
 
 func (o *OcservUser) BeforeUpdate(tx *gorm.DB) (err error) {
-	if o.TrafficType != "" {
-		if !validateTrafficType(o.TrafficType) {
-			return fmt.Errorf("invalid TrafficType: %s", o.TrafficType)
-		}
+	if o.TrafficType == "" {
+		o.TrafficType = Free
 	}
+
+	if !validateTrafficType(o.TrafficType) {
+		return fmt.Errorf("invalid TrafficType: %s", o.TrafficType)
+	}
+
 	if o.TrafficType == Free {
 		o.TrafficSize = 0
 	}
@@ -113,9 +146,14 @@ func (o *OcservUser) BeforeUpdate(tx *gorm.DB) (err error) {
 }
 
 func (o *OcservUser) BeforeCreate(tx *gorm.DB) (err error) {
+	if o.TrafficType == "" {
+		o.TrafficType = Free
+	}
+
 	if !validateTrafficType(o.TrafficType) {
 		return fmt.Errorf("invalid TrafficType: %s", o.TrafficType)
 	}
+
 	if o.TrafficType == Free {
 		o.TrafficSize = 0
 	}

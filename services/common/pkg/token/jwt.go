@@ -3,7 +3,7 @@ package token
 import (
 	"errors"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/config"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/config"
 	"time"
 )
 

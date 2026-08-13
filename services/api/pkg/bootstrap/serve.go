@@ -2,10 +2,10 @@ package bootstrap
 
 import (
 	"context"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/routing"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/config"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/database"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/logger"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/routing"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/config"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/database"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/logger"
 	"os"
 	"os/signal"
 	"syscall"
@@ -28,9 +28,7 @@ func Serve(debug bool, host string, port int) {
 	cfg := config.Get()
 
 	database.Connect()
-	Migrate()
-
-	defer database.CloseConnection()
+	defer database.Close()
 
 	go routing.Serve(cfg)
 
@@ -48,7 +46,7 @@ func Serve(debug bool, host string, port int) {
 	logger.Warn("Shutting down... Signal Reason: %s", sig.String())
 
 	routing.Shutdown(ctx)
-	database.CloseConnection()
+	database.Close()
 
 	logger.Info("Api service shutdown complete")
 }

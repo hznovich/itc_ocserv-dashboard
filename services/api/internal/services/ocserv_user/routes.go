@@ -2,7 +2,7 @@ package ocserv_user
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/routing/middlewares"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/routing/middlewares"
 )
 
 func Routes(e *echo.Group) {
@@ -18,9 +18,9 @@ func Routes(e *echo.Group) {
 	g.POST("/:uid/unlock", ctl.UnLockOcservUser)
 	g.POST("/:uid/activate", ctl.ActivateExpiredOcservUsers)
 	g.POST("/:username/disconnect", ctl.DisconnectOcservUser)
-	g.GET("/:uid/statistics", ctl.StatisticsOcservUser)
-	g.GET("/statistics", ctl.Statistics, middlewares.AdminPermission())
-	g.GET("/total-bandwidth", ctl.TotalBandwidth, middlewares.AdminPermission())
+	g.GET("/:uid/session_logs", ctl.OcservUserSessionLogs)
+	g.GET("/:uid/statistics", ctl.OcservUserStatistics)
+
 	g.GET("/ocpasswd", ctl.OcpasswdUsers, middlewares.AdminPermission())
 	g.POST("/ocpasswd/sync", ctl.SyncToDB, middlewares.AdminPermission())
 }

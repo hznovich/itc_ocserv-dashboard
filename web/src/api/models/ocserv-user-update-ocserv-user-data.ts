@@ -65,6 +65,12 @@ export interface OcservUserUpdateOcservUserData {
      * @memberof OcservUserUpdateOcservUserData
      */
     'traffic_type'?: OcservUserUpdateOcservUserDataTrafficTypeEnum;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof OcservUserUpdateOcservUserData
+     */
+    'unlimited'?: boolean;
 }
 
 export const OcservUserUpdateOcservUserDataTrafficTypeEnum = {

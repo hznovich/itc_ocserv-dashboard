@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/mmtaee/ocserv-users-management/api/cmd"
-	_ "github.com/mmtaee/ocserv-users-management/api/docs"
+	"github.com/mmtaee/ocserv-dashboard/api/cmd"
+	_ "github.com/mmtaee/ocserv-dashboard/api/docs"
 )
 
 // @title Ocserv User management Example Api

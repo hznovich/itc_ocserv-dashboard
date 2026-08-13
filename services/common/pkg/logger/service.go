@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"time"
 )
+
+var inSend int32
 
 func Init(ctx context.Context, bufferSize int) {
 	l := &Logger{
@@ -64,6 +67,12 @@ func SafeSprintf(format string, args ...interface{}) (result string) {
 }
 
 func send(level LogLevel, message string) {
+	if !atomic.CompareAndSwapInt32(&inSend, 0, 1) {
+		// already inside send, drop message to prevent recursion
+		return
+	}
+	defer atomic.StoreInt32(&inSend, 0)
+
 	if Log != nil && Log.logChan != nil {
 		select {
 		case Log.logChan <- LogMessage{
@@ -72,7 +81,7 @@ func send(level LogLevel, message string) {
 			Time:    time.Now(),
 		}:
 		default:
-			// optional: drop message if buffer full
+			// drop if buffer full
 		}
 	}
 }
@@ -90,6 +99,7 @@ func Error(format string, args ...interface{}) {
 }
 
 func Fatal(format string, args ...interface{}) {
-	send(FatalLevel, SafeSprintf(format, args...))
+	msg := SafeSprintf(format, args...)
+	fmt.Fprintf(os.Stderr, "[FATAL] %s\n", msg) // direct write
 	os.Exit(1)
 }

@@ -2,11 +2,11 @@ package repository
 
 import (
 	"context"
-	"github.com/mmtaee/ocserv-users-management/api/pkg/request"
-	"github.com/mmtaee/ocserv-users-management/common/models"
-	"github.com/mmtaee/ocserv-users-management/common/ocserv/group"
-	"github.com/mmtaee/ocserv-users-management/common/ocserv/occtl"
-	"github.com/mmtaee/ocserv-users-management/common/pkg/database"
+	"github.com/mmtaee/ocserv-dashboard/api/pkg/request"
+	"github.com/mmtaee/ocserv-dashboard/common/models"
+	"github.com/mmtaee/ocserv-dashboard/common/ocserv/group"
+	"github.com/mmtaee/ocserv-dashboard/common/ocserv/occtl"
+	"github.com/mmtaee/ocserv-dashboard/common/pkg/database"
 	"gorm.io/gorm"
 )
 
