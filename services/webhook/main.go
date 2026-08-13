@@ -32,12 +32,24 @@ func init() {
 	ocservUserHandler = user.NewOcservUser()
 }
 
+// webhookPort honours WEBHOOK_PORT from .env, which supervisord already passes
+// through. It used to be hardcoded to 8888 — with network_mode: host that binds
+// the HOST's interfaces, so any other service on 8888 (SoftEther, for one) kept
+// this process in a FATAL restart loop. The 1xxxx default is the documented one
+// and exists precisely to avoid those collisions.
+func webhookPort() string {
+	if v := os.Getenv("WEBHOOK_PORT"); v != "" {
+		return v
+	}
+	return "18888"
+}
+
 func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/webhook/", webhookHandler)
 
 	server := &http.Server{
-		Addr:    "0.0.0.0:8888",
+		Addr:    fmt.Sprintf("0.0.0.0:%s", webhookPort()),
 		Handler: mux,
 	}
 

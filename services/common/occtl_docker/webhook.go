@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/mmtaee/ocserv-dashboard/common/pkg/logger"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -24,7 +25,20 @@ type OcservOcctlUsersDocker interface {
 }
 
 func NewOcservOcctlDocker() *OcservOcctlDocker {
-	return &OcservOcctlDocker{apiURL: "http://ocserv:8888"}
+	return &OcservOcctlDocker{apiURL: webhookURL()}
+}
+
+// webhookURL locates the webhook process. Upstream used "http://ocserv:8888" —
+// a docker-network service name from the multi-container layout, which does not
+// resolve in this single-image build. Everything shares one network namespace
+// here, so loopback is the address; the port must track WEBHOOK_PORT, or
+// user_expiry and log_stream silently fail to lock and disconnect users.
+func webhookURL() string {
+	port := os.Getenv("WEBHOOK_PORT")
+	if port == "" {
+		port = "18888"
+	}
+	return fmt.Sprintf("http://127.0.0.1:%s", port)
 }
 
 // call webhook endpoint api
