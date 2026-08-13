@@ -1,0 +1,19 @@
+# Everything textual is stored and checked out with LF, regardless of the
+# contributor's core.autocrlf. This is not cosmetic: configs/entrypoint.sh,
+# configs/certbot-renew.sh and install.sh run inside the Linux image, and a
+# CRLF checkout on Windows makes the shebang line fail with a bare
+# "no such file or directory".
+* text=auto eol=lf
+
+# Explicit for the files that end up executed or parsed inside the container.
+*.sh        text eol=lf
+*.conf      text eol=lf
+*.tmpl      text eol=lf
+Dockerfile  text eol=lf
+*.yml       text eol=lf
+.env.sample text eol=lf
+
+# Binary: never touch, never diff as text.
+*.png binary
+*.jpg binary
+*.ico binary
