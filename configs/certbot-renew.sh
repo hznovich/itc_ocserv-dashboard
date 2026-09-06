@@ -31,8 +31,15 @@ while true; do
         --logs-dir /var/log/letsencrypt; then
         # Reload services on success. We don't care if a particular signal
         # fails — both ocserv and nginx are robust to it.
-        if [ -f /var/run/ocserv.pid ]; then
-            kill -HUP "$(cat /var/run/ocserv.pid)" 2>/dev/null || true
+        #
+        # The path must match `pid-file` in the ocserv.conf the entrypoint
+        # generates, which is /run/ocserv/ocserv.pid. It is NOT
+        # /var/run/ocserv.pid: that resolves to /run/ocserv.pid, one directory
+        # short, so the test silently failed and ocserv kept presenting the old
+        # chain after a successful renewal while nginx picked up the new one.
+        # The dashboard looked correct and only VPN clients saw a stale cert.
+        if [ -f /run/ocserv/ocserv.pid ]; then
+            kill -HUP "$(cat /run/ocserv/ocserv.pid)" 2>/dev/null || true
         fi
         nginx -s reload 2>/dev/null || true
     else
